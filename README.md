@@ -62,8 +62,12 @@ docker run -d \
 |----------|---------|-------------|
 | `PUID` | `1000` | User ID to run the server process as |
 | `PGID` | `1000` | Group ID to run the server process as |
-| `UPDATE_ON_START` | `true` | Download and validate server files on every startup. Set to `false` to skip |
-| `INVITE_CODE` | | Invite code players use to connect. Min 6 characters, `0-9 a-z A-Z`, case sensitive |
+| `UPDATE_ON_START` | `true` | Download and validate server files on every startup. Set to `false` to skip. |
+| `USE_DIRECT_CONNECTION` | `false` | Set to `true` to connect to your server via IP and port instead of invite code. |
+| `SERVER_PORT` | `7777` | Only applies if `USE_DIRECT_CONNECTION=true`. Port for direct connection. |
+| `DIRECT_CONNECTION_PROXY_ADDRESS` | `0.0.0.0` | Only applies if `USE_DIRECT_CONNECTION=true`. Address for the direct connection proxy. |
+| `USER_SELECTED_REGION` | `EU` | Region for the connection service. Options: `SEA`, `CIS`, `EU` |
+| `INVITE_CODE` | | Invite code players use to connect if `USE_DIRECT_CONNECTION=false` (default). Min 6 characters, `0-9 a-z A-Z`, case sensitive |
 | `SERVER_NAME` | | Display name for your server |
 | `SERVER_PASSWORD` | | Leave empty for a public server |
 | `MAX_PLAYERS` | `10` | Maximum number of simultaneous players |
@@ -76,7 +80,20 @@ On first start the server automatically generates two configuration files inside
 
 ### Connecting
 
-Players connect via invite code. The code is set by `INVITE_CODE` in your `.env` and is also visible in `server-files/R5/ServerDescription.json` under `InviteCode`. Share it with players who join via **Play → Connect to Server** in-game.
+Players connect either via invite code (default) or IP address & port. The values for both can be set in your `.env` and are also visible in `server-files/R5/ServerDescription.json`.
+Invite codes use the ICE protocol to establish a P2P connection.
+Using your server's IP address will establish a direct connection.
+
+> [!IMPORTANT]
+> You can use an invite code or a direct connection via IP address, but not both.
+
+#### Invite code
+
+The code is set by `INVITE_CODE` in the `.env` file or `InviteCode` in `ServerDescription.json`. Share it with players who join via **Play → Connect to Server** in-game.
+
+#### IP Address
+
+This is enabled by `USE_DIRECT_CONNECTION=true` in the `.env` file or `UseDirectConnection` in `ServerDescription.json`.
 
 #### LAN connections
 
@@ -106,6 +123,11 @@ Located at `server-files/R5/ServerDescription.json`. This file can only be edite
 | Field | Description |
 |-------|-------------|
 | `InviteCode` | Invite code for players to find your server. Min 6 chars, `0-9 a-z A-Z`, case sensitive |
+| `UseDirectConnection` | `true` if using direct connection via IP, or `false` (default) if using invite code |
+| `DirectConnectionServerPort` | Port when direct connection is enabled. Default is `7777` |
+| `DirectConnectionServerAddress` | Technical field — should not be changed |
+| `DirectConnectionProxyAddress` | Address for the direct connection proxy. Default is `0.0.0.0` |
+| `UserSelectedRegion` | Region for the connection service. Default is `EU`. Options: `SEA`, `CIS`, `EU` |
 | `IsPasswordProtected` | `true` or `false` |
 | `Password` | Server password |
 | `ServerName` | Display name of the server |
@@ -124,7 +146,12 @@ Located at `server-files/R5/ServerDescription.json`. This file can only be edite
         "ServerName": "My Windrose Server",
         "WorldIslandId": "...",
         "MaxPlayerCount": 10,
-        "P2pProxyAddress": "127.0.0.1"
+        "P2pProxyAddress": "127.0.0.1",
+        "DirectConnectionProxyAddress": "0.0.0.0",
+        "UseDirectConnection": false,
+        "DirectConnectionServerPort": 7777,
+        "UserSelectedRegion": "EU",
+        "DirectConnectionServerAddress": ""
     }
 }
 ```
