@@ -9,7 +9,6 @@ cd "$SERVER_FILES" || exit
 LogAction "Starting Windrose Dedicated Server"
 
 SERVER_DESC="$SERVER_FILES/R5/ServerDescription.json"
-
 SERVER_EXEC="$SERVER_FILES/R5/Binaries/Win64/WindroseServer-Win64-Shipping.exe"
 
 if [ ! -f "$SERVER_EXEC" ]; then
@@ -23,11 +22,18 @@ export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
 export WINEARCH="${WINEARCH:-win64}"
 export WINEDLLOVERRIDES="mscoree,mshtml=;dwmapi=n,b"
 
-if [ "${WINE_VERBOSE:-false}" = "true" ]; then
+if [ "${DIAGNOSTIC_MODE:-false}" = "true" ]; then
+    export WINEDEBUG="${WINEDEBUG:-+seh,+tid,+timestamp}"
+    SERVER_ARGS="${SERVER_ARGS:--log -STDOUT -nullrhi -nosound}"
+elif [ "${WINE_VERBOSE:-false}" = "true" ]; then
     export WINEDEBUG="${WINEDEBUG:-+all}"
+    SERVER_ARGS="${SERVER_ARGS:--log -STDOUT}"
 else
     export WINEDEBUG="${WINEDEBUG:-fixme-all}"
+    SERVER_ARGS="${SERVER_ARGS:--log -STDOUT}"
 fi
+
+read -r -a SERVER_ARGS_ARRAY <<< "$SERVER_ARGS"
 
 # First run: start server briefly to generate ServerDescription.json
 if [ "${GENERATE_SETTINGS:-true}" = "false" ]; then
@@ -36,7 +42,7 @@ elif [ ! -f "$SERVER_DESC" ]; then
     LogAction "First boot detected - ServerDescription.json not found"
     LogInfo "Starting server temporarily to generate default config files..."
 
-    xvfb-run --auto-servernum wine "$SERVER_EXEC" -log -STDOUT &
+    xvfb-run --auto-servernum wine "$SERVER_EXEC" "${SERVER_ARGS_ARRAY[@]}" &
     firstrun_pid=$!
 
     count=0
@@ -106,10 +112,10 @@ LogInfo "Server is starting..."
 
 LOG_FILE="$SERVER_FILES/R5/Saved/Logs/R5.log"
 
-if [ "${WINE_VERBOSE:-false}" = "true" ]; then
-    xvfb-run --auto-servernum wine "$SERVER_EXEC" -log &
+if [ "${WINE_VERBOSE:-false}" = "true" ] || [ "${DIAGNOSTIC_MODE:-false}" = "true" ]; then
+    xvfb-run --auto-servernum wine "$SERVER_EXEC" "${SERVER_ARGS_ARRAY[@]}" &
 else
-    xvfb-run --auto-servernum wine "$SERVER_EXEC" -log >/dev/null 2>&1 &
+    xvfb-run --auto-servernum wine "$SERVER_EXEC" "${SERVER_ARGS_ARRAY[@]}" >/dev/null 2>&1 &
 fi
 wine_pid=$!
 

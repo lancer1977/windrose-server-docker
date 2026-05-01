@@ -1,0 +1,10 @@
+services:
+  windrose:
+    image: indifferentbroccoli/windrose-server-docker
+    platform: linux/amd64
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./server-files:/home/steam/server-files

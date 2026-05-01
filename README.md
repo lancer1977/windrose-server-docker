@@ -40,8 +40,25 @@ services:
       - ./server-files:/home/steam/server-files
 ```
 
+For LAN or direct-IP testing, use `docker-compose.host.yml` instead:
+
+```yaml
+services:
+  windrose:
+    image: indifferentbroccoli/windrose-server-docker
+    platform: linux/amd64
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./server-files:/home/steam/server-files
+```
+
 ```shell
 docker compose up -d
+# or for host networking
+docker compose -f docker-compose.yml -f docker-compose.host.yml up -d
 ```
 
 ### Docker Run
@@ -74,6 +91,8 @@ docker run -d \
 | `P2P_PROXY_ADDRESS` | `127.0.0.1` | IP address the P2P proxy binds to. Use `127.0.0.1` (default) in Docker — the proxy is an internal socket and does not need to be reachable from outside the container |
 | `GENERATE_SETTINGS` | `true` | Set to `false` to skip all config generation and patching. The server will start using whatever is already in `ServerDescription.json` on disk or create a new one. |
 | `WINE_VERBOSE` | `false` | Set to `true` to enable verbose Wine logging. Useful for diagnosing Wine crashes. Enables `WINEDEBUG=+all` and surfaces Wine output directly in the container logs. |
+| `SERVER_ARGS` | `-log -STDOUT` | Extra arguments passed to the Windrose server executable. Use this to test flags like `-nullrhi` and `-nosound`. |
+| `DIAGNOSTIC_MODE` | `false` | Set to `true` to use a narrower Wine trace (`+seh,+tid,+timestamp`) and a diagnostic server launch (`-log -STDOUT -nullrhi -nosound`). |
 
 ## UE4SS (optional)
 
