@@ -13,6 +13,13 @@ Game server hosting · Fast RAM · High-speed internet · Eat lag for breakfast
 
 A Docker container for running a Windrose dedicated server. The server binary is Windows-only and runs via Wine.
 
+## Project Docs
+
+Additional implementation notes and planning docs live under [`docs/`](docs/README.md).
+
+- [`docs/features/server-state-observability/`](docs/features/server-state-observability/README.md) tracks log, save, and checkpoint surfaces for exposing server state.
+- [`docs/roadmaps/companion-state-webserver/`](docs/roadmaps/companion-state-webserver/README.md) tracks the phased plan for a companion-style webserver/API.
+
 ## Server Requirements
 
 | | 2 Players | 4 Players | 10 Players |
