@@ -1,0 +1,42 @@
+﻿@page "/diagnostics"
+@rendermode InteractiveServer
+@inject IWindroseStateStore Store
+@inject Microsoft.Extensions.Options.IOptions<Windrose.StateWeb.Options.WindroseStateOptions> Options
+
+@{
+    var state = Store.GetState();
+    var options = Options.Value;
+}
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Diagnostics</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Parser</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Status</td><td>@state.ParserStatus</td></tr>
+                        <tr><td>Log Available</td><td>@state.LogAvailable</td></tr>
+                        <tr><td>Last Log Read</td><td>@(state.LastLogRead?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td></tr>
+                        <tr><td>Last Event</td><td>@(state.LastEventAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td></tr>
+                        <tr><td>Error</td><td>@(state.ParserError ?? "-")</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Paths</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Server Files</td><td class="mono">@options.ServerFilesPath</td></tr>
+                        <tr><td>Log Path</td><td class="mono">@options.LogPath</td></tr>
+                        <tr><td>Save Root</td><td class="mono">@options.SaveRootPath</td></tr>
+                        <tr><td>Event Retention</td><td>@options.EventRetention</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>

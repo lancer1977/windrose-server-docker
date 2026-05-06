@@ -14,3 +14,16 @@ services:
       - .env
     volumes:
       - ./server-files:/home/steam/server-files
+
+  windrose-state-web:
+    build:
+      context: .
+      dockerfile: src/Windrose.StateWeb/Dockerfile
+    restart: unless-stopped
+    container_name: windrose-state-web
+    ports:
+      - '8781:8781/tcp'
+    environment:
+      WindroseState__ServerFilesPath: /server-files
+    volumes:
+      - ./server-files:/server-files:ro

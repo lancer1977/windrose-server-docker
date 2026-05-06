@@ -1,0 +1,25 @@
+﻿@page "/saves"
+@rendermode InteractiveServer
+@inject IWindroseStateStore Store
+
+@{
+    var state = Store.GetState();
+    var save = state.Save;
+}
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Saves</MudText>
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudSimpleTable Dense="true">
+            <tbody>
+                <tr><td>Active Island</td><td class="mono">@(save.ActiveIslandId ?? state.CurrentIslandId ?? "-")</td></tr>
+                <tr><td>World Name</td><td>@(save.WorldName ?? "-")</td></tr>
+                <tr><td>World Preset</td><td>@(save.WorldPresetType ?? "-")</td></tr>
+                <tr><td>Latest Backup</td><td class="mono">@(save.LatestBackupPath ?? "-")</td></tr>
+                <tr><td>Backup Time</td><td>@(save.LatestBackupTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td></tr>
+                <tr><td>Backup Size</td><td>@(save.LatestBackupSizeBytes is null ? "-" : $"{save.LatestBackupSizeBytes / 1024 / 1024:N1} MB")</td></tr>
+                <tr><td>Error</td><td>@(save.Error ?? "-")</td></tr>
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+</MudStack>

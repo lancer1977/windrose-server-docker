@@ -1,0 +1,34 @@
+﻿@page "/players"
+@rendermode InteractiveServer
+@inject IWindroseStateStore Store
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Players</MudText>
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudTable Items="Store.GetState().Players" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Phase</MudTh>
+                <MudTh>Connected</MudTh>
+                <MudTh>Session</MudTh>
+                <MudTh>Account</MudTh>
+                <MudTh>Last Seen</MudTh>
+                <MudTh>Disconnect</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@(context.ClientName ?? "-")</MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="@(context.IsConnected ? Color.Success : Color.Default)">@context.Phase</MudChip></MudTd>
+                <MudTd>@context.IsConnected</MudTd>
+                <MudTd Class="mono">@Short(context.SessionId)</MudTd>
+                <MudTd Class="mono">@Short(context.AccountId)</MudTd>
+                <MudTd>@context.LastSeen.ToLocalTime().ToString("MM-dd HH:mm:ss")</MudTd>
+                <MudTd>@(context.DisconnectReason ?? "-")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private static string Short(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "-" : value.Length <= 12 ? value : $"{value[..8]}...";
+}

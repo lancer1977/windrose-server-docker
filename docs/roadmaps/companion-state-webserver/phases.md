@@ -4,38 +4,38 @@
 
 Goal: expose useful server/player lifecycle state without decoding save data.
 
-- [ ] Create C# Blazor/MudBlazor sidecar app skeleton under `src/Windrose.StateWeb`
-- [ ] Mount `server-files` read-only
-- [ ] Tail `R5/Saved/Logs/R5.log`
-- [ ] Handle missing file on startup
-- [ ] Handle log rotation
-- [ ] Parse server initialized marker
-- [ ] Parse server ready marker
-- [ ] Parse registration settings block
-- [ ] Parse `AddPlayer` events
-- [ ] Parse `Login request` events
-- [ ] Parse `Join request` events
-- [ ] Parse disconnect events
-- [ ] Expose `/health`
-- [ ] Expose `/state`
-- [ ] Expose `/players`
-- [ ] Expose `/events`
-- [ ] Add MudBlazor operator dashboard
-- [ ] Add parser tests
+- [x] Create C# Blazor/MudBlazor sidecar app skeleton under `src/Windrose.StateWeb`
+- [x] Mount `server-files` read-only
+- [x] Tail `R5/Saved/Logs/R5.log`
+- [x] Handle missing file on startup
+- [x] Handle log rotation
+- [x] Parse server initialized marker
+- [x] Parse server ready marker
+- [x] Parse registration settings block
+- [x] Parse `AddPlayer` events
+- [x] Parse `Login request` events
+- [x] Parse `Join request` events
+- [x] Parse disconnect events
+- [x] Expose `/health`
+- [x] Expose `/state`
+- [x] Expose `/players`
+- [x] Expose `/events`
+- [x] Add MudBlazor operator dashboard
+- [x] Add parser tests
 
 ## Phase 2 - Save Snapshot Metadata
 
 Goal: expose world and backup state from stable files.
 
-- [ ] Discover active island id from logs
+- [x] Discover active island id from logs
 - [ ] Discover active island id from `ServerDescription.json`
-- [ ] Locate `RocksDB_v2_Backups/Worlds/<island-id>/*_Latest.zip`
-- [ ] Read backup timestamp and size
-- [ ] Read `AdditionalRecordFiles/WorldDescription.json`
-- [ ] Expose `/saves/latest`
-- [ ] Expose `/world/description`
-- [ ] Add backup freshness warnings
-- [ ] Add UI panel for save freshness and world preset
+- [x] Locate `RocksDB_v2_Backups/Worlds/<island-id>/*_Latest.zip`
+- [x] Read backup timestamp and size
+- [x] Read `AdditionalRecordFiles/WorldDescription.json`
+- [x] Expose `/saves/latest`
+- [x] Expose `/world/description`
+- [x] Add backup freshness warnings
+- [x] Add UI panel for save freshness and world preset
 
 ## Phase 3 - RocksDB Checkpoint Decoder
 
@@ -71,11 +71,11 @@ Goal: expose map/player/ship state if decoding proves viable.
 
 Goal: make this usable on the server host.
 
-- [ ] Add compose service
-- [ ] Add configurable web port
-- [ ] Add read-only mount
-- [ ] Add restart policy
-- [ ] Add basic auth or LAN-only guidance
-- [ ] Add logs for parser health
+- [x] Add compose service
+- [x] Add configurable web port
+- [x] Add read-only mount
+- [x] Add restart policy
+- [x] Add basic auth or LAN-only guidance
+- [x] Add logs for parser health
 - [ ] Add deployment docs for `192.168.0.252`
 - [ ] Validate under Portainer

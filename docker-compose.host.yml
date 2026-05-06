@@ -8,3 +8,7 @@ services:
       - .env
     volumes:
       - ./server-files:/home/steam/server-files
+
+  windrose-state-web:
+    volumes:
+      - ./server-files:/server-files:ro

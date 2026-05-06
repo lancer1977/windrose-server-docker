@@ -1,0 +1,38 @@
+html,
+body {
+    font-family: Roboto, Arial, sans-serif;
+    background: #f4f6f8;
+}
+
+a {
+    color: inherit;
+}
+
+.mono {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+}
+
+.text-wrap {
+    overflow-wrap: anywhere;
+}
+
+#blazor-error-ui {
+    background: #fff4ce;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.75rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 1rem;
+    top: 0.5rem;
+}

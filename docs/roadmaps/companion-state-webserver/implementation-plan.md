@@ -221,21 +221,21 @@ Phase 3 adds RocksDB decoding only after a spike proves values can be decoded sa
 
 Phase 1 is complete when:
 
-- [ ] sidecar starts with `docker compose`
-- [ ] dashboard loads on port `8781`
-- [ ] `/health` returns OK
-- [ ] `/api/state` reports log path and parser status
+- [x] sidecar starts with `docker compose`
+- [x] dashboard loads on port `8781`
+- [x] `/health` returns OK
+- [x] `/api/state` reports log path and parser status
 - [ ] server ready state appears after parsing real `R5.log`
-- [ ] player login/join/disconnect events appear from fixture logs
-- [ ] active player state is derived from parsed events
-- [ ] tests cover the key log markers
+- [x] player login/join/disconnect events appear from fixture logs
+- [x] active player state is derived from parsed events
+- [x] tests cover the key log markers
 
 Phase 2 is complete when:
 
-- [ ] latest backup ZIP is discovered
-- [ ] backup freshness appears in UI
-- [ ] `WorldDescription.json` is parsed and exposed
-- [ ] missing backup data degrades cleanly
+- [x] latest backup ZIP is discovered
+- [x] backup freshness appears in UI
+- [x] `WorldDescription.json` is parsed and exposed
+- [x] missing backup data degrades cleanly
 
 ## Explicit Non-Goals For First Build
 

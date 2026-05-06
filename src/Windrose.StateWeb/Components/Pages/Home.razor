@@ -1,0 +1,123 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject IWindroseStateStore Store
+@implements IDisposable
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4">Overview</MudText>
+        <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.overline">Server</MudText>
+                <MudText Typo="Typo.h5">@(_state.IsReady ? "Ready" : "Starting")</MudText>
+                <MudText Typo="Typo.body2">@_state.ParserStatus</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.overline">Players</MudText>
+                <MudText Typo="Typo.h5">@_state.Players.Count(p => p.IsConnected) / @(_state.MaxPlayers?.ToString() ?? "-")</MudText>
+                <MudText Typo="Typo.body2">active sessions</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.overline">Island</MudText>
+                <MudText Typo="Typo.h6" Class="text-wrap">@(_state.CurrentIslandId ?? "Unknown")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.overline">Latest Backup</MudText>
+                <MudText Typo="Typo.h6">@FormatAge(_state.Save.BackupAge)</MudText>
+                <MudText Typo="Typo.body2">@(_state.Save.WorldPresetType ?? "No world metadata")</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Server Settings</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Server Name</td><td>@(_state.ServerName ?? "-")</td></tr>
+                        <tr><td>Invite Code</td><td>@(_state.InviteCode ?? "-")</td></tr>
+                        <tr><td>Direct Connection</td><td>@(_state.UseDirectConnection?.ToString() ?? "-")</td></tr>
+                        <tr><td>Direct Port</td><td>@(_state.DirectConnectionServerPort?.ToString() ?? "-")</td></tr>
+                        <tr><td>Log Available</td><td>@_state.LogAvailable</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Recent Events</MudText>
+                <MudTable Items="_state.RecentEvents.Take(8)" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Message</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudTd>
+                        <MudTd>@context.Type</MudTd>
+                        <MudTd>@context.Message</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>
+
+@code {
+    private WindroseServerState _state = new();
+    private DateTimeOffset _lastRefresh = DateTimeOffset.Now;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = RefreshLoop(_cts.Token);
+    }
+
+    private async Task RefreshLoop(CancellationToken cancellationToken)
+    {
+        while (_timer is not null && await _timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await InvokeAsync(() =>
+            {
+                Refresh();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void Refresh()
+    {
+        _state = Store.GetState();
+        _lastRefresh = DateTimeOffset.Now;
+    }
+
+    private static string FormatAge(TimeSpan? age)
+    {
+        if (age is null) return "-";
+        if (age.Value.TotalMinutes < 1) return $"{age.Value.Seconds}s ago";
+        if (age.Value.TotalHours < 1) return $"{(int)age.Value.TotalMinutes}m ago";
+        return $"{(int)age.Value.TotalHours}h {age.Value.Minutes}m ago";
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
+}

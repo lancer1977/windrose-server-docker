@@ -1,0 +1,37 @@
+﻿@page "/events"
+@rendermode InteractiveServer
+@inject IWindroseStateStore Store
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h4">Events</MudText>
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudTable Items="Store.GetState().RecentEvents" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Time</MudTh>
+                <MudTh>Severity</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Player</MudTh>
+                <MudTh>Message</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Timestamp.ToLocalTime().ToString("MM-dd HH:mm:ss")</MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="@SeverityColor(context.Severity)">@context.Severity</MudChip></MudTd>
+                <MudTd>@context.Type</MudTd>
+                <MudTd>@(context.ClientName ?? Short(context.SessionId) ?? "-")</MudTd>
+                <MudTd>@context.Message</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private static Color SeverityColor(string severity) => severity switch
+    {
+        "Error" => Color.Error,
+        "Warning" => Color.Warning,
+        _ => Color.Info
+    };
+
+    private static string? Short(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Length <= 12 ? value : $"{value[..8]}...";
+}

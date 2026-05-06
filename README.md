@@ -47,6 +47,8 @@ services:
       - ./server-files:/home/steam/server-files
 ```
 
+The compose file also includes an optional internal state dashboard sidecar at `http://<host>:8781`. It mounts `./server-files` read-only and exposes parsed server state, player lifecycle events, and save metadata.
+
 For LAN or direct-IP testing, use `docker-compose.host.yml` instead:
 
 ```yaml
@@ -136,6 +138,37 @@ RCON password, admin Steam IDs, and feature flags are re-read live from `windros
 | `WINDROSE_PLUS_VERSION` | baked-in default | GitHub release tag of Windrose+ to install. Leave empty for the image default. |
 | `WINDROSE_PLUS_DASHBOARD_PORT` | `8780` | Port the web dashboard listens on inside the container. |
 | `WINDROSE_PLUS_RCON_PASSWORD` | (empty → random) | Dashboard login password. Only applied when `windrose_plus.json` does not exist yet. |
+
+## State Web Dashboard
+
+This repo includes a C# Blazor/MudBlazor sidecar app for internal server observability.
+
+Default URL:
+
+```text
+http://localhost:8781
+```
+
+Default API endpoints:
+
+```text
+GET /health
+GET /api/state
+GET /api/players
+GET /api/events
+GET /api/events/stream
+GET /api/saves/latest
+GET /api/world/description
+```
+
+The sidecar reads:
+
+```text
+./server-files/R5/Saved/Logs/R5.log
+./server-files/R5/Saved/SaveProfiles/Default
+```
+
+The `server-files` mount is read-only inside the sidecar. The first build is intentionally internal/LAN-only and does not add authentication.
 
 ### Ports
 

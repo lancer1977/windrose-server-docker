@@ -1,0 +1,8 @@
+.codex
+**/bin/
+**/obj/
+server-files/
+*.user
+*.suo
+*.swp
+*.tmp
