@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Windrose.StateWeb.Core/Windrose.StateWeb.Core.csproj" />
     <Project Path="src/Windrose.StateWeb/Windrose.StateWeb.csproj" />
   </Folder>
   <Folder Name="/tests/">

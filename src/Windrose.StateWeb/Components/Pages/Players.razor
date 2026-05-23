@@ -1,17 +1,23 @@
 ﻿@page "/players"
 @rendermode InteractiveServer
 @inject IWindroseStateStore Store
+@implements IDisposable
 
 <MudStack Spacing="3">
-    <MudText Typo="Typo.h4">Players</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4">Players</MudText>
+        <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
+    </MudStack>
     <MudPaper Class="pa-4" Elevation="1">
-        <MudTable Items="Store.GetState().Players" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+        <MudText Typo="Typo.h6" Class="mb-3">Active and Recent Players</MudText>
+        <MudTable Items="_state.Players.OrderByDescending(player => player.LastSeen)" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
             <HeaderContent>
                 <MudTh>Name</MudTh>
                 <MudTh>Phase</MudTh>
                 <MudTh>Connected</MudTh>
                 <MudTh>Session</MudTh>
                 <MudTh>Account</MudTh>
+                <MudTh>First Seen</MudTh>
                 <MudTh>Last Seen</MudTh>
                 <MudTh>Disconnect</MudTh>
             </HeaderContent>
@@ -21,6 +27,7 @@
                 <MudTd>@context.IsConnected</MudTd>
                 <MudTd Class="mono">@Short(context.SessionId)</MudTd>
                 <MudTd Class="mono">@Short(context.AccountId)</MudTd>
+                <MudTd>@context.FirstSeen.ToLocalTime().ToString("MM-dd HH:mm:ss")</MudTd>
                 <MudTd>@context.LastSeen.ToLocalTime().ToString("MM-dd HH:mm:ss")</MudTd>
                 <MudTd>@(context.DisconnectReason ?? "-")</MudTd>
             </RowTemplate>
@@ -29,6 +36,44 @@
 </MudStack>
 
 @code {
+    private WindroseServerState _state = new();
+    private DateTimeOffset _lastRefresh = DateTimeOffset.Now;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = RefreshLoop(_cts.Token);
+    }
+
+    private async Task RefreshLoop(CancellationToken cancellationToken)
+    {
+        while (_timer is not null && await _timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await InvokeAsync(() =>
+            {
+                Refresh();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void Refresh()
+    {
+        _state = Store.GetState();
+        _lastRefresh = DateTimeOffset.Now;
+    }
+
     private static string Short(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "-" : value.Length <= 12 ? value : $"{value[..8]}...";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
 }

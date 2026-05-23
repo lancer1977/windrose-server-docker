@@ -32,7 +32,7 @@
 
 ## Milestone 5 - Operator Ready
 
-- [ ] Compose deployment documented
-- [ ] Webserver access secured or LAN-scoped
-- [ ] Smoke validation documented
-- [ ] Portainer deployment notes captured
+- [x] Compose deployment documented
+- [x] Webserver access secured or LAN-scoped
+- [x] Smoke validation documented
+- [x] Portainer deployment notes captured

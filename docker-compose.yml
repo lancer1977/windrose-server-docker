@@ -25,5 +25,21 @@ services:
       - '8781:8781/tcp'
     environment:
       WindroseState__ServerFilesPath: /server-files
+      WindroseState__ServerDescriptionRelativePath: R5/ServerDescription.json
+      WindroseState__EnableChannelCheevosPush: ${WINDROSE_STATE_ENABLE_CHANNEL_CHEEVOS_PUSH:-false}
+      WindroseState__ChannelCheevosTarget: ${WINDROSE_STATE_CHANNEL_CHEEVOS_TARGET:-prod}
+      WindroseState__ChannelCheevosHubUrl: ${WINDROSE_STATE_CHANNEL_CHEEVOS_HUB_URL:-}
+      WindroseState__ChannelCheevosHubUrlDev: ${WINDROSE_STATE_CHANNEL_CHEEVOS_HUB_URL_DEV:-}
+      WindroseState__ChannelCheevosHubUrlDebug: ${WINDROSE_STATE_CHANNEL_CHEEVOS_HUB_URL_DEBUG:-}
+      WindroseState__ChannelCheevosHubUrlProd: ${WINDROSE_STATE_CHANNEL_CHEEVOS_HUB_URL_PROD:-}
+      WindroseState__ChannelCheevosWebKey: ${WINDROSE_STATE_CHANNEL_CHEEVOS_WEBKEY:-}
+      WindroseState__ChannelCheevosWebKeyDev: ${WINDROSE_STATE_CHANNEL_CHEEVOS_WEBKEY_DEV:-}
+      WindroseState__ChannelCheevosWebKeyDebug: ${WINDROSE_STATE_CHANNEL_CHEEVOS_WEBKEY_DEBUG:-}
+      WindroseState__ChannelCheevosWebKeyProd: ${WINDROSE_STATE_CHANNEL_CHEEVOS_WEBKEY_PROD:-}
+      WindroseState__ChannelCheevosStateMethod: ${WINDROSE_STATE_CHANNEL_CHEEVOS_STATE_METHOD:-WindroseStateUpdate}
+      WindroseState__ChannelCheevosEventMethod: ${WINDROSE_STATE_CHANNEL_CHEEVOS_EVENT_METHOD:-WindroseEvent}
+      Seq__ServerUrl: ${WINDROSE_SEQ_URL:-}
+      Seq__ApiKey: ${WINDROSE_SEQ_API_KEY:-}
+      Seq__MinimumLevel: ${WINDROSE_SEQ_MINIMUM_LEVEL:-Information}
     volumes:
       - ./server-files:/server-files:ro

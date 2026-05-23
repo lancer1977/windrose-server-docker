@@ -1,7 +1,11 @@
 html,
 body {
     font-family: Roboto, Arial, sans-serif;
-    background: #f4f6f8;
+    background:
+        radial-gradient(circle at top left, rgba(42, 86, 105, 0.16), transparent 34%),
+        radial-gradient(circle at top right, rgba(161, 100, 57, 0.12), transparent 28%),
+        linear-gradient(180deg, #f7fafc 0%, #eef2f6 100%);
+    color: #1f2937;
 }
 
 a {
@@ -16,6 +20,57 @@ a {
 
 .text-wrap {
     overflow-wrap: anywhere;
+}
+
+.dashboard-shell {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.dashboard-hero,
+.summary-card,
+.panel-card {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.dashboard-hero {
+    background:
+        linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(255, 255, 255, 0.94) 58%),
+        rgba(255, 255, 255, 0.94);
+}
+
+.summary-card {
+    min-height: 128px;
+}
+
+.summary-value {
+    font-size: 1.5rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.summary-caption {
+    color: rgba(31, 41, 55, 0.74);
+}
+
+.status-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.mono-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.06);
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.8rem;
 }
 
 #blazor-error-ui {

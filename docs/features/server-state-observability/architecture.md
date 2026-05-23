@@ -38,6 +38,14 @@ Used for slower, richer world state:
 - RocksDB live database
 - checkpoint backups
 
+### Server Description
+
+```text
+server-files/R5/ServerDescription.json
+```
+
+Used for the authoritative server settings that the log parser can only observe indirectly.
+
 ### Backup Checkpoints
 
 ```text
@@ -56,7 +64,7 @@ Responsibilities:
 - [ ] tolerate log rotation
 - [ ] parse known marker lines into structured events
 - [ ] maintain current server/player state
-- [ ] write a compact state snapshot
+- [x] write a compact state snapshot
 
 ### Save Snapshot Reader
 
@@ -64,7 +72,7 @@ Responsibilities:
 
 - [ ] find the newest checkpoint ZIP
 - [ ] read `WorldDescription.json`
-- [ ] optionally extract checkpoint files to a temp path
+- [x] extract checkpoint files to a temp path for analysis
 - [ ] inspect RocksDB keys and values
 - [ ] emit decoded world/player/ship/object data when safe
 
@@ -74,16 +82,18 @@ Initial endpoints:
 
 ```text
 GET /health
-GET /state
-GET /players
-GET /events
-GET /saves/latest
+GET /api/state
+GET /api/players
+GET /api/events
+GET /api/saves/latest
+GET /api/server/description
+GET /api/world/description
 ```
 
 Streaming endpoints:
 
 ```text
-GET /events/stream
+GET /api/events/stream
 GET /ws
 ```
 
@@ -97,6 +107,10 @@ Initial views:
 - [ ] latest save/backup status
 - [ ] decoded world summary
 
+### Live Push
+
+The sidecar can optionally push state updates to `channel-cheevos` over SignalR using a shared webkey. This is off by default and stays read-only on the Windrose side.
+
 ## Data Flow
 
 ```text
@@ -104,11 +118,17 @@ R5.log
   -> log tailer
   -> event parser
   -> state store
+  -> snapshot writer
+  -> HTTP JSON / browser UI
+
+ServerDescription.json
+  -> save inspector
+  -> state store
   -> HTTP JSON / browser UI
 
 RocksDB_v2_Backups/*_Latest.zip
   -> checkpoint reader
-  -> save decoder
+  -> safe save summary reader
   -> state store
   -> HTTP JSON / browser UI
 ```
@@ -125,7 +145,21 @@ RocksDB_v2_Backups/*_Latest.zip
 ## Open Technical Questions
 
 - [ ] Can the RocksDB values be decoded directly with standard RocksDB tooling?
-- [ ] Are state payloads JSON, protobuf, Unreal binary serialization, or a custom format?
+- [x] Is the checkpoint container a RocksDB block-based SST?
+- [ ] Are the per-value payloads JSON, protobuf, Unreal binary serialization, or a custom format?
 - [ ] Does Windrose+ already expose a map/state endpoint that should be reused?
 - [ ] Can the companion app WebSocket schema be observed from a Windows client and mirrored?
 - [ ] Which state should be real-time versus snapshot-based?
+
+## Container Format Note
+
+The latest live backup ZIP shows standard RocksDB SST evidence:
+
+- `Checkpoint/private/1/MANIFEST-000021`
+- `Checkpoint/private/1/OPTIONS-000059`
+- `rocksdb.block.based.table.index.type`
+- `prefix.filtering0`
+- `whole.key.filtering1`
+- the fixed RocksDB SST magic at the end of the checkpoint files
+
+That is enough to identify the container as a block-based RocksDB SST checkpoint, but not enough to decode the Windrose document payloads safely.

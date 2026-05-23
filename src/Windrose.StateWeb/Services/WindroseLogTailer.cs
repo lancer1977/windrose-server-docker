@@ -17,6 +17,7 @@ public sealed class WindroseLogTailer(
     {
         var position = 0L;
         var lastLength = 0L;
+        var lastWriteTimeUtc = DateTimeOffset.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -30,16 +31,18 @@ public sealed class WindroseLogTailer(
                 }
 
                 var info = new FileInfo(_options.LogPath);
+                var currentWriteTimeUtc = info.LastWriteTimeUtc;
                 if (_options.TailFromEnd && position == 0)
                 {
                     position = info.Length;
                 }
-                else if (info.Length < lastLength)
+                else if (info.Length < lastLength || (currentWriteTimeUtc != lastWriteTimeUtc && info.Length <= lastLength))
                 {
                     position = 0;
                 }
 
                 lastLength = info.Length;
+                lastWriteTimeUtc = currentWriteTimeUtc;
                 stateStore.SetLogAvailable(true);
 
                 using var stream = new FileStream(_options.LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

@@ -2,17 +2,27 @@
 @rendermode InteractiveServer
 @inject IWindroseStateStore Store
 @inject Microsoft.Extensions.Options.IOptions<Windrose.StateWeb.Options.WindroseStateOptions> Options
+@implements IDisposable
 
 @{
-    var state = Store.GetState();
     var options = Options.Value;
 }
 
-<MudStack Spacing="3">
-    <MudText Typo="Typo.h4">Diagnostics</MudText>
+<MudStack Spacing="3" Class="dashboard-shell">
+    <MudPaper Class="pa-5 dashboard-hero" Elevation="0">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h4">Diagnostics</MudText>
+                <MudText Typo="Typo.body2">
+                    Health, paths, and live-push settings for the state sidecar.
+                </MudText>
+            </MudStack>
+            <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
+        </MudStack>
+    </MudPaper>
     <MudGrid>
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
                 <MudText Typo="Typo.h6" Class="mb-3">Parser</MudText>
                 <MudSimpleTable Dense="true">
                     <tbody>
@@ -26,17 +36,73 @@
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
                 <MudText Typo="Typo.h6" Class="mb-3">Paths</MudText>
                 <MudSimpleTable Dense="true">
                     <tbody>
                         <tr><td>Server Files</td><td class="mono">@options.ServerFilesPath</td></tr>
                         <tr><td>Log Path</td><td class="mono">@options.LogPath</td></tr>
                         <tr><td>Save Root</td><td class="mono">@options.SaveRootPath</td></tr>
+                        <tr><td>Server Description</td><td class="mono">@options.ServerDescriptionPath</td></tr>
                         <tr><td>Event Retention</td><td>@options.EventRetention</td></tr>
+                        <tr><td>SignalR Push</td><td>@(options.EnableChannelCheevosPush ? "Enabled" : "Disabled")</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-3">Live Push Configuration</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Target</td><td>@options.ResolvedChannelCheevosTarget</td></tr>
+                        <tr><td>Hub URL</td><td class="mono">@(options.ResolveChannelCheevosHubUrl() ?? "-")</td></tr>
+                        <tr><td>Webkey Set</td><td>@(!string.IsNullOrWhiteSpace(options.ResolveChannelCheevosWebKey()))</td></tr>
+                        <tr><td>State Method</td><td>@options.ChannelCheevosStateMethod</td></tr>
+                        <tr><td>Event Method</td><td>@options.ChannelCheevosEventMethod</td></tr>
                     </tbody>
                 </MudSimpleTable>
             </MudPaper>
         </MudItem>
     </MudGrid>
 </MudStack>
+
+@code {
+    private WindroseServerState state = new();
+    private DateTimeOffset _lastRefresh = DateTimeOffset.Now;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = RefreshLoop(_cts.Token);
+    }
+
+    private async Task RefreshLoop(CancellationToken cancellationToken)
+    {
+        while (_timer is not null && await _timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await InvokeAsync(() =>
+            {
+                Refresh();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void Refresh()
+    {
+        state = Store.GetState();
+        _lastRefresh = DateTimeOffset.Now;
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
+}

@@ -57,4 +57,39 @@ public sealed class WindroseLogParserTests
         Assert.Equal("ServerSettingsObserved", evt.Type);
         Assert.Equal("Polyhydra Games", evt.Properties?["ServerName"]);
     }
+
+    [Fact]
+    public void ParsesServerDescriptionSettingsLine()
+    {
+        var evt = _parser.ParseLine("    \"PersistentServerId\": \"abcdef1234567890\",");
+
+        Assert.NotNull(evt);
+        Assert.Equal("ServerSettingsObserved", evt.Type);
+        Assert.Equal("abcdef1234567890", evt.Properties?["PersistentServerId"]);
+    }
+
+    [Fact]
+    public void ParsesUnknownLinesAsNull()
+    {
+        var evt = _parser.ParseLine("this line does not match any pattern");
+
+        Assert.Null(evt);
+    }
+
+    [Fact]
+    public void ParsesBlankLinesAsNull()
+    {
+        var evt = _parser.ParseLine("\t  \r\n");
+
+        Assert.Null(evt);
+    }
+
+    [Fact]
+    public void ParsesCaseVariantServerReadyMarker()
+    {
+        var evt = _parser.ParseLine("[2026.05.04-21.28.14:837][ 62]R5LOGCOOPPROXY: UR5LOGCOOPPROXYSERVER::SETISREADYFORHOSTOWNERCONNECT Host server is ready for owner to connect.");
+
+        Assert.NotNull(evt);
+        Assert.Equal("ServerReady", evt!.Type);
+    }
 }

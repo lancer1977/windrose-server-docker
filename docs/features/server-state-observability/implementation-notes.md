@@ -1,23 +1,41 @@
 # Server State Observability Implementation Notes
 
+## V3 Implementation Notes
+
+- The sidecar now reads `server-files/R5/ServerDescription.json` directly and uses it as the authoritative source for server settings when available.
+- The latest backup ZIP is summarized in a read-only way: world preset fields, safe JSON previews, and collection counts are exposed without writing back into `server-files`.
+- Live state can be pushed out to `channel-cheevos` over SignalR when the `WindroseState__EnableChannelCheevosPush` and `WindroseState__ChannelCheevos*` settings are provided. The live-push target is now environment-driven so the same stack can select `dev`, `debug`, or `prod` hubs and webkeys without changing the application code.
+- The sidecar now uses the Microsoft logging pipeline with optional Seq forwarding when `Seq__ServerUrl` and `Seq__ApiKey` are configured; the provider is intentionally gated so it stays quiet until both values are present.
+- The SignalR client currently uses configurable method names and automatic reconnect, but the receiver-side `channel-cheevos` contract still needs confirmation.
+- The sender-side hub URL builder appends the shared `webkey` as an encoded query string and preserves existing query parameters.
+- The browser dashboard now polls the shared state store and surfaces the richer save/server summaries plus safe observed-family hints instead of only the initial log-derived view.
+- The overview and diagnostics pages now use a more deliberate shell and summary-card treatment so the highest-signal status is easier to scan.
+- The API surface now includes read-only health, state, player, event, save, server-description, and world-description endpoints plus an SSE event stream.
+- The API surface now also includes read-only history export, time-series export, and overlay-summary endpoints so lighter operator history and browser-source consumers can reuse the same safe JSON surface.
+- The API surface also includes a read-only observed-families summary endpoint for safe island, actor, and player-reference hints without claiming a ship decoder.
+- The API surface also exposes safe `/api/world/entities`, `/api/world/players`, `/api/world/ships`, `/api/world/actors`, and `/api/world/summary` slices so the route contract is present even though the underlying ship/player document decode remains open.
+- State changes now persist a compact last-known JSON snapshot to `WindroseStateOptions.SnapshotPath` after each update.
+- The log tailer now rewinds on log shrink and same-size replacement as a practical rotation signal.
+- Missing log files drive the parser into a degraded state with a readable error message instead of a crash.
+
 ## Findings From Remote Log Review
 
 Remote host:
 
 ```text
-192.168.0.252
+internal test host
 ```
 
 Observed server path:
 
 ```text
-/home/lancer1977/game_servers/windrose/server-files
+/path/to/windrose/server-files
 ```
 
 SMB equivalent:
 
 ```text
-smb://192.168.0.252/gameservers/windrose/server-files
+smb://internal-test-host/gameservers/windrose/server-files
 ```
 
 ## Log Files
@@ -148,6 +166,16 @@ String scans of RocksDB `.sst` files found names including:
 - `Rotation`
 - `Inventory`
 - `Quest`
+
+Current live-backup evidence is still summary-level:
+
+- `R5BLPlayerInWorld` and `R5BLPlayer` show up in RocksDB metadata files (`MANIFEST-000021` and `OPTIONS-000059`)
+- `ShipId`, `Actor_InteractedPoiIds`, `Actor_RemovedDialogueActorIds`, and `LandscapeLocation` show up in the data SSTs
+- some SSTs behave like single-entry blocks whose values expose safe names such as `CommonIsland` and `LandscapeLocation`
+- at least one live SST value also exposes structured field names such as `Blocks`, `DataKey`, `MarkupKey`, `IslandId`, and `ChangeRevision`
+- the tiny `shared_checksum/000015_590266782_175.blob` file is internal RocksDB metadata, not a separate blob-backed domain payload store; the checkpoint options explicitly show `enable_blob_files=false`
+- the current live save tree does not contain a `R5BLShip` string at all, so the current snapshot only proves `ShipId` references inside other document families rather than a standalone ship document
+- no decoded player or ship document has been proven yet
 
 This suggests the save data is the best route for companion-like state, but decoding still needs proof.
 

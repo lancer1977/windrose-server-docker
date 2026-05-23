@@ -1,47 +1,97 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 @inject IWindroseStateStore Store
+@inject Microsoft.Extensions.Options.IOptions<Windrose.StateWeb.Options.WindroseStateOptions> Options
 @implements IDisposable
 
-<MudStack Spacing="3">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-        <MudText Typo="Typo.h4">Overview</MudText>
-        <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
-    </MudStack>
+<MudStack Spacing="3" Class="dashboard-shell">
+    <MudPaper Class="pa-5 dashboard-hero" Elevation="0">
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.h4">Overview</MudText>
+                    <MudText Typo="Typo.body2">
+                        Live server state, save freshness, and operator telemetry in one read-only surface.
+                    </MudText>
+                </MudStack>
+                <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
+            </MudStack>
+
+            <div class="status-chip-row">
+                <MudChip T="string" Color="@ServerStatusColor" Variant="Variant.Filled">
+                    @(_state.IsReady ? "Ready" : "Starting")
+                </MudChip>
+                <MudChip T="string" Color="@LogStatusColor" Variant="Variant.Outlined">
+                    Log @(_state.LogAvailable ? "Available" : "Missing")
+                </MudChip>
+                <MudChip T="string" Color="@LivePushColor" Variant="Variant.Outlined">
+                    Live push @(LivePushLabel())
+                </MudChip>
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
+                    Island @(_state.CurrentIslandId ?? "unknown")
+                </MudChip>
+            </div>
+        </MudStack>
+    </MudPaper>
 
     <MudGrid>
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
                 <MudText Typo="Typo.overline">Server</MudText>
-                <MudText Typo="Typo.h5">@(_state.IsReady ? "Ready" : "Starting")</MudText>
-                <MudText Typo="Typo.body2">@_state.ParserStatus</MudText>
+                <MudText Typo="Typo.h5" Class="summary-value">@(_state.IsReady ? "Ready" : "Starting")</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">@_state.ParserStatus</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
                 <MudText Typo="Typo.overline">Players</MudText>
-                <MudText Typo="Typo.h5">@_state.Players.Count(p => p.IsConnected) / @(_state.MaxPlayers?.ToString() ?? "-")</MudText>
-                <MudText Typo="Typo.body2">active sessions</MudText>
+                <MudText Typo="Typo.h5" Class="summary-value">@_state.Players.Count(p => p.IsConnected) / @(_state.MaxPlayers?.ToString() ?? "-")</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">active sessions</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
                 <MudText Typo="Typo.overline">Island</MudText>
-                <MudText Typo="Typo.h6" Class="text-wrap">@(_state.CurrentIslandId ?? "Unknown")</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value text-wrap">@(_state.CurrentIslandId ?? _state.Save.WorldIslandId ?? "Unknown")</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">@(_state.ServerDescription?.WorldIslandId ?? "No server description")</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
                 <MudText Typo="Typo.overline">Latest Backup</MudText>
-                <MudText Typo="Typo.h6">@FormatAge(_state.Save.BackupAge)</MudText>
-                <MudText Typo="Typo.body2">@(_state.Save.WorldPresetType ?? "No world metadata")</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@FormatAge(_state.Save.BackupAge)</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">@(_state.Save.WorldPresetType ?? "No world metadata")</MudText>
+                <MudText Typo="Typo.caption" Class="summary-caption">@(_state.Save.DocumentSummaries.Count) documents</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Observed Families</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@_state.Save.ObservedFamilies.Count</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">@ShipBoundaryLabel()</MudText>
+                <MudText Typo="Typo.caption" Class="summary-caption">safe family hints only</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Live Push</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@LivePushLabel()</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption text-wrap">@LivePushTarget()</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">History</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@_state.RecentHistory.Count</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">recent timeline entries</MudText>
+                <MudText Typo="Typo.caption" Class="summary-caption">lightweight operator history</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
 
     <MudGrid>
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
                 <MudText Typo="Typo.h6" Class="mb-3">Server Settings</MudText>
                 <MudSimpleTable Dense="true">
                     <tbody>
@@ -49,13 +99,44 @@
                         <tr><td>Invite Code</td><td>@(_state.InviteCode ?? "-")</td></tr>
                         <tr><td>Direct Connection</td><td>@(_state.UseDirectConnection?.ToString() ?? "-")</td></tr>
                         <tr><td>Direct Port</td><td>@(_state.DirectConnectionServerPort?.ToString() ?? "-")</td></tr>
+                        <tr><td>Public Host</td><td>@(_state.ServerDescription?.DirectConnectionServerAddress ?? "-")</td></tr>
+                        <tr><td>P2P Proxy</td><td>@(_state.ServerDescription?.P2pProxyAddress ?? "-")</td></tr>
+                        <tr><td>Region</td><td>@(_state.ServerDescription?.UserSelectedRegion ?? "-")</td></tr>
                         <tr><td>Log Available</td><td>@_state.LogAvailable</td></tr>
                     </tbody>
                 </MudSimpleTable>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="1">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-3">World Summary</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>World Name</td><td>@(_state.Save.WorldName ?? "-")</td></tr>
+                        <tr><td>Preset</td><td>@(_state.Save.WorldPresetType ?? "-")</td></tr>
+                        <tr><td>Settings</td><td>@WorldSettingsLabel()</td></tr>
+                        <tr><td>Server Description</td><td>@(_state.Save.ServerDescription?.SourcePath ?? "-")</td></tr>
+                        <tr><td>Backup Count</td><td>@_state.Save.CollectionSummaries.Sum(summary => summary.Count)</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-3">Overlay / History Surfaces</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Overlay Summary</td><td>/api/overlay/summary</td></tr>
+                        <tr><td>History Export</td><td>/api/history/export</td></tr>
+                        <tr><td>Time-Series Export</td><td>/api/history/timeseries</td></tr>
+                        <tr><td>Recent History</td><td>@($"{_state.RecentHistory.Count} entries")</td></tr>
+                        <tr><td>Overlay Consumer</td><td>channel-cheevos / cc-sidecar</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
                 <MudText Typo="Typo.h6" Class="mb-3">Recent Events</MudText>
                 <MudTable Items="_state.RecentEvents.Take(8)" Dense="true" Hover="true">
                     <HeaderContent>
@@ -65,6 +146,25 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudTd>
+                        <MudTd>@context.Type</MudTd>
+                        <MudTd>@context.Message</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-3">Recent Warnings</MudText>
+                <MudTable Items="_state.RecentWarnings.Take(8)" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Severity</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Message</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudTd>
+                        <MudTd>@context.Severity</MudTd>
                         <MudTd>@context.Type</MudTd>
                         <MudTd>@context.Message</MudTd>
                     </RowTemplate>
@@ -106,6 +206,38 @@
         _lastRefresh = DateTimeOffset.Now;
     }
 
+    private string LivePushLabel()
+    {
+        var options = Options.Value;
+        if (!options.EnableChannelCheevosPush)
+        {
+            return "Disabled";
+        }
+
+        return string.IsNullOrWhiteSpace(options.ResolveChannelCheevosHubUrl()) || string.IsNullOrWhiteSpace(options.ResolveChannelCheevosWebKey())
+            ? "Unconfigured"
+            : "Enabled";
+    }
+
+    private string LivePushTarget()
+    {
+        var options = Options.Value;
+        return string.IsNullOrWhiteSpace(options.ResolveChannelCheevosHubUrl()) || string.IsNullOrWhiteSpace(options.ResolveChannelCheevosWebKey())
+            ? "No channel-cheevos hub configured"
+            : $"{options.ResolvedChannelCheevosTarget}: {options.ResolveChannelCheevosHubUrl()}";
+    }
+
+    private string WorldSettingsLabel()
+    {
+        var save = _state.Save;
+        if (save.WorldSettingCount is null)
+        {
+            return "-";
+        }
+
+        return $"{save.WorldSettingCount} total ({save.WorldBoolSettingCount ?? 0} bool, {save.WorldFloatSettingCount ?? 0} float, {save.WorldTagSettingCount ?? 0} tag)";
+    }
+
     private static string FormatAge(TimeSpan? age)
     {
         if (age is null) return "-";
@@ -113,6 +245,20 @@
         if (age.Value.TotalHours < 1) return $"{(int)age.Value.TotalMinutes}m ago";
         return $"{(int)age.Value.TotalHours}h {age.Value.Minutes}m ago";
     }
+
+    private string ShipBoundaryLabel()
+    {
+        var shipFamily = _state.Save.ObservedFamilies.FirstOrDefault(family => family.Name == "ship-document");
+        return shipFamily is null
+            ? "Ship document not assessed"
+            : $"{shipFamily.Status}: {shipFamily.Notes}";
+    }
+
+    private Color ServerStatusColor => _state.IsReady ? Color.Success : Color.Warning;
+
+    private Color LogStatusColor => _state.LogAvailable ? Color.Info : Color.Error;
+
+    private Color LivePushColor => string.IsNullOrWhiteSpace(Options.Value.ResolveChannelCheevosHubUrl()) || string.IsNullOrWhiteSpace(Options.Value.ResolveChannelCheevosWebKey()) ? Color.Default : Color.Secondary;
 
     public void Dispose()
     {

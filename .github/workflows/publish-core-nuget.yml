@@ -1,0 +1,89 @@
+name: Publish Windrose.StateWeb.Core NuGet package
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version to publish, without a leading v
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build, test, pack, and publish
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_PROJECT: src/Windrose.StateWeb.Core/Windrose.StateWeb.Core.csproj
+      PACKAGE_OUTPUT: artifacts/nuget
+      NUGET_SOURCE: https://api.nuget.org/v3/index.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            version="${{ github.event.release.tag_name }}"
+          else
+            version="${{ inputs.version }}"
+          fi
+
+          version="${version#v}"
+
+          if [[ -z "$version" ]]; then
+            echo "::error::Package version is empty."
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore WindroseServerDocker.slnx
+
+      - name: Test
+        run: dotnet test WindroseServerDocker.slnx --configuration Release --no-restore
+
+      - name: Pack
+        run: >
+          dotnet pack "${PACKAGE_PROJECT}"
+          --configuration Release
+          --no-restore
+          --no-build
+          --output "${PACKAGE_OUTPUT}"
+          -p:PackageVersion=${{ steps.version.outputs.version }}
+
+      - name: Validate publish secret
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${NUGET_API_KEY:-}" ]]; then
+            echo "::error::Missing repository secret NUGET_API_KEY."
+            exit 1
+          fi
+
+      - name: Publish to nuget.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "${PACKAGE_OUTPUT}/Windrose.StateWeb.Core.${{ steps.version.outputs.version }}.nupkg"
+          --api-key "${NUGET_API_KEY}"
+          --source "${NUGET_SOURCE}"
+          --skip-duplicate

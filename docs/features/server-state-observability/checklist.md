@@ -12,6 +12,17 @@
 - [x] Found RocksDB string evidence for `R5BLPlayerInWorld`, `R5BLPlayer`, `R5BLShip`, actors, locations, rotations, inventory, and quests
 - [ ] Confirm whether RocksDB values can be decoded without game code
 - [ ] Confirm whether Windrose+ already exposes enough dashboard/map data for this goal
+- [x] Read `ServerDescription.json` from the mounted server files
+- [x] Read the latest backup ZIP and expose safe JSON document previews
+- [x] Wire the Microsoft logging pipeline to optional Seq ingestion
+- [x] Confirm the checkpoint container is a RocksDB block-based SST
+- [x] Confirm the tiny `shared_checksum/*.blob` file is internal RocksDB metadata, not an alternate payload source
+- [x] Add a read-only observed-families endpoint for safe island/actor/player-reference hints
+- [x] Add safe `/api/world/entities`, `/api/world/players`, `/api/world/ships`, and `/api/world/actors` summary slices
+- [x] Add an overlay-friendly `/api/world/summary` endpoint
+- [x] Add safe overlay-friendly JSON for the current world/observed-family state
+- [x] Add lightweight broader-history JSON for operators and overlay consumers
+- [x] Add a lightweight time-series export for operators and overlay consumers
 
 ## Documentation
 
@@ -20,62 +31,66 @@
 - [x] Capture known log markers
 - [x] Capture proposed state model
 - [x] Create companion-state webserver roadmap
-- [ ] Add implementation docs after first prototype
-- [ ] Document deployment once sidecar exists
+- [x] Add implementation docs after first prototype
+- [x] Document deployment once sidecar exists
 
 ## Log Parser
 
-- [ ] Tail `R5.log` from the mounted `server-files` path
-- [ ] Parse server initialized and ready markers
-- [ ] Parse registration settings block
-- [ ] Parse player add/reserve events
-- [ ] Parse login and join events
-- [ ] Parse expected disconnects
-- [ ] Parse unexpected P2P disconnects
-- [ ] Keep in-memory active player map
-- [ ] Persist a compact last-known state JSON file
+- [x] Tail `R5.log` from the mounted `server-files` path
+- [x] Parse server initialized and ready markers
+- [x] Parse registration settings block
+- [x] Parse player add/reserve events
+- [x] Parse login and join events
+- [x] Parse expected disconnects
+- [x] Parse unexpected P2P disconnects
+- [x] Keep in-memory active player map
+- [x] Persist a compact last-known state JSON file
 
 ## Webserver
 
-- [ ] Add sidecar service to compose
-- [ ] Expose `/health`
-- [ ] Expose `/state`
-- [ ] Expose `/players`
-- [ ] Expose `/events`
-- [ ] Expose Server-Sent Events or WebSocket stream
-- [ ] Add minimal browser dashboard
+- [x] Add sidecar service to compose
+- [x] Expose `/health`
+- [x] Expose `/api/state`
+- [x] Expose `/api/players`
+- [x] Expose `/api/events`
+- [x] Expose `/api/events/stream`
+- [x] Add minimal browser dashboard
+- [x] Add read-only `ServerDescription.json` endpoint
+- [x] Add read-only world/save metadata endpoints
+- [x] Add save freshness and parser health panels
 
 ## Save Data
 
-- [ ] Locate newest `RocksDB_v2_Backups/.../*_Latest.zip`
-- [ ] Read `AdditionalRecordFiles/WorldDescription.json`
-- [ ] Extract safe checkpoint copy for analysis
-- [ ] Build a read-only RocksDB inspection proof of concept
+- [x] Locate newest `RocksDB_v2_Backups/.../*_Latest.zip`
+- [x] Read `AdditionalRecordFiles/WorldDescription.json`
+- [x] Extract safe checkpoint copy for analysis
+- [x] Build a read-only backup inspection summary
 - [ ] Identify keys/types for player, player-in-world, ship, and actor documents
-- [ ] Determine whether coordinates are plain, protobuf, binary, or compressed payloads
-- [ ] Add a snapshot endpoint if decoding is viable
+- [ ] Determine whether per-value payloads are plain, protobuf, binary, or compressed
+- [x] Add a read-only snapshot endpoint for checkpoint summaries
 
 ## Testing
 
-- [ ] Add parser fixture from real redacted log snippets
-- [ ] Test player connect sequence
-- [ ] Test player disconnect sequence
-- [ ] Test server restart/log rotation behavior
-- [ ] Test missing log file behavior
-- [ ] Test missing backup ZIP behavior
-- [ ] Test read-only mounted `server-files`
+- [x] Add parser fixture from real redacted log snippets
+- [x] Test player connect sequence
+- [x] Test player disconnect sequence
+- [x] Test server restart/log rotation behavior
+- [x] Test missing log file behavior
+- [x] Test missing backup ZIP behavior
+- [x] Test read-only mounted `server-files`
 
 ## Release / Deployment
 
-- [ ] Add compose service with read-only bind mount
-- [ ] Document required port
-- [ ] Document security expectations for LAN-only access
-- [ ] Add restart policy
-- [ ] Add log level knobs
-- [ ] Validate on `192.168.0.252`
+- [x] Add compose service with read-only bind mount
+- [x] Document required port
+- [x] Document security expectations for LAN-only access
+- [x] Add restart policy
+- [x] Add log level knobs
+- [x] Publish the reusable core contracts package to nuget.org
+- [ ] Validate on the target host
 
 ## Follow-up
 
 - [ ] Consider mimicking the companion app WebSocket protocol if payload shape is discovered
 - [ ] Consider ingesting state into a time-series store for stream overlays
-- [ ] Consider exporting simple JSON for Channel Cheevos or OBS browser sources
+- [x] Export simple JSON for Channel Cheevos or OBS browser sources

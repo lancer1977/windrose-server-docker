@@ -19,6 +19,8 @@ Additional implementation notes and planning docs live under [`docs/`](docs/READ
 
 - [`docs/features/server-state-observability/`](docs/features/server-state-observability/README.md) tracks log, save, and checkpoint surfaces for exposing server state.
 - [`docs/roadmaps/companion-state-webserver/`](docs/roadmaps/companion-state-webserver/README.md) tracks the phased plan for a companion-style webserver/API.
+- [`src/Windrose.StateWeb.Core/`](src/Windrose.StateWeb.Core/Windrose.StateWeb.Core.csproj) holds the reusable payload/response models and helper abstractions shared by Windrose and future consumers.
+- The shared core layer is packable and published to nuget.org from GitHub Actions for downstream consumers that should not depend on this repository as a sibling checkout.
 
 ## Server Requirements
 
@@ -48,6 +50,10 @@ services:
 ```
 
 The compose file also includes an optional internal state dashboard sidecar at `http://<host>:8781`. It mounts `./server-files` read-only and exposes parsed server state, player lifecycle events, and save metadata.
+The dashboard is read-only, but it still surfaces sensitive server metadata such as player names, account ids, invite codes, and backup details. Do not expose it directly to the public internet without an access-control layer.
+If you want the sidecar to push live state into `channel-cheevos`, set the `WINDROSE_STATE_*` env vars for the `windrose-state-web` service. The push is off by default and uses a shared webkey in the query string. You can also select a live-push target with `WINDROSE_STATE_CHANNEL_CHEEVOS_TARGET=dev|debug|prod` and point that target at a matching hub URL and webkey pair without changing application code.
+
+The sidecar also supports optional Microsoft logging to Seq. Set `Seq__ServerUrl` and `Seq__ApiKey` for the `windrose-state-web` service to forward structured logs to `seq.polyhydragames.com` or another Seq instance using the same `ILogger` pipeline as the rest of the app.
 
 For LAN or direct-IP testing, use `docker-compose.host.yml` instead:
 
@@ -139,6 +145,16 @@ RCON password, admin Steam IDs, and feature flags are re-read live from `windros
 | `WINDROSE_PLUS_DASHBOARD_PORT` | `8780` | Port the web dashboard listens on inside the container. |
 | `WINDROSE_PLUS_RCON_PASSWORD` | (empty → random) | Dashboard login password. Only applied when `windrose_plus.json` does not exist yet. |
 
+### Seq logging
+
+The optional Seq harness uses the standard Microsoft logging pipeline. It stays disabled until both values are present.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SEQ__SERVERURL` | (empty) | Seq base URL, for example `https://seq.polyhydragames.com`. |
+| `SEQ__APIKEY` | (empty) | Seq ingest API key for this app. |
+| `SEQ__MINIMUMLEVEL` | `Information` | Minimum level forwarded to Seq. |
+
 ## State Web Dashboard
 
 This repo includes a C# Blazor/MudBlazor sidecar app for internal server observability.
@@ -157,8 +173,23 @@ GET /api/state
 GET /api/players
 GET /api/events
 GET /api/events/stream
+GET /snapshot
+GET /eventsrecent
+GET /events/recent
+GET /api/history
+GET /api/history/export
+GET /api/history/timeseries
 GET /api/saves/latest
+GET /api/saves/latest/checkpoint
+GET /api/saves/latest/observed-families
+GET /api/server/description
 GET /api/world/description
+GET /api/world/entities
+GET /api/world/players
+GET /api/world/ships
+GET /api/world/actors
+GET /api/world/summary
+GET /api/overlay/summary
 ```
 
 The sidecar reads:
@@ -166,9 +197,12 @@ The sidecar reads:
 ```text
 ./server-files/R5/Saved/Logs/R5.log
 ./server-files/R5/Saved/SaveProfiles/Default
+./server-files/R5/ServerDescription.json
 ```
 
-The `server-files` mount is read-only inside the sidecar. The first build is intentionally internal/LAN-only and does not add authentication.
+The `server-files` mount is read-only inside the sidecar. The first build is intended for trusted networks only; add reverse-proxy auth, VPN access, or another protection layer before exposing it publicly.
+
+The save reader now summarizes the latest backup ZIP instead of just the backup file metadata. It exposes safe JSON document previews, collection counts, world preset details, and `ServerDescription.json` fields while still avoiding any write access into the save tree.
 
 ### Ports
 

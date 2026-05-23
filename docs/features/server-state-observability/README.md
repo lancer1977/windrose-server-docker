@@ -8,15 +8,30 @@ The current server does not expose the same companion-app WebSocket surface that
 
 ## Status
 
-- [x] Local Docker repo cloned to `/home/lancer1977/code/windrose-server-docker`
-- [x] Remote server logs inspected under `/home/lancer1977/game_servers/windrose/server-files/R5/Saved/Logs`
+- [x] Local Docker repo cloned into the active workspace
+- [x] Remote server logs inspected on the target host under the Windrose server-files tree
 - [x] Current log stream confirmed as `R5/Saved/Logs/R5.log`
 - [x] Player lifecycle markers found in logs
 - [x] World/save storage located under `R5/Saved/SaveProfiles/Default`
 - [x] RocksDB checkpoint backups found under `RocksDB_v2_Backups`
-- [ ] Companion-style webserver implemented
-- [ ] RocksDB/checkpoint reader implemented
-- [ ] Browser UI implemented
+- [x] Companion-style webserver implemented
+- [x] Safe backup summary reader implemented
+- [x] Browser UI implemented
+- [x] Live state publication hook implemented
+- [x] Microsoft logging harness with optional Seq forwarding implemented
+- [x] Read-only operator API implemented for health, state, players, events, save metadata, and server/world metadata
+- [x] Read-only history export and overlay summary endpoints implemented
+- [x] Read-only time-series export endpoint implemented
+- [x] Compact snapshot file persisted for the last known state
+- [x] Latest checkpoint ZIPs are extracted to a temp analysis directory for read-only inspection
+- [x] Log rotation and missing-log handling verified
+- [x] Overview and diagnostics panels received a small polish pass
+- [x] `channel-cheevos` live-push receiver contract now exists on `windrose-state`
+- [x] Valheim-compatible snapshot and recent-events aliases now exist for shared operator/overlay contract shape
+- [x] Reusable core payload project exists for shared models, interfaces, and helper extensions
+- [x] Reusable core payload project is packable and has a GitHub Actions release workflow for NuGet publication
+- [x] Live push can be target-selected by environment (`dev`, `debug`, `prod`) without changing application code
+- [ ] Deep RocksDB checkpoint decoding remains summary-only until proven safe
 
 ## Runtime Surfaces
 
@@ -74,6 +89,8 @@ RocksDB_v2_Backups/Worlds/<island-id>/
 ```
 
 The current server writes RocksDB state and periodic checkpoint ZIP backups. The latest backup contains a RocksDB checkpoint plus `AdditionalRecordFiles/WorldDescription.json`.
+
+The save API now exposes read-only checkpoint summary snapshots at `/api/saves/latest/checkpoint` and `/api/saves/latest/observed-families`, and the world API now exposes safe `/api/world/entities`, `/api/world/players`, `/api/world/ships`, `/api/world/actors`, and `/api/world/summary` slices. All of these are limited to safe container/entry metadata and observed family hints rather than claiming decoded player or ship documents.
 
 ## Current Useful Log Markers
 
@@ -150,4 +167,4 @@ Account disconnected. Inform Cm. AccountId <account-id>. BLPlayerSessionId <sess
 
 ## Next Step
 
-Build a small sidecar service that starts with read-only access to `server-files`, tails `R5.log`, and exposes a JSON status endpoint. Add RocksDB/checkpoint parsing only after the log-derived status is stable.
+Work from `docs/roadmaps/companion-state-webserver/remaining-work.md` for the remaining contract, deployment, and decoding items. Keep any deeper checkpoint work behind the same read-only inspection path instead of expanding the write surface.

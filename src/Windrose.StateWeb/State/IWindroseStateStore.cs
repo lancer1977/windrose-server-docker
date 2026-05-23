@@ -10,4 +10,5 @@ public interface IWindroseStateStore
     void Apply(WindroseEvent evt);
     void UpdateSaveMetadata(SaveMetadata save);
     ChannelReader<WindroseEvent> Subscribe(CancellationToken cancellationToken);
+    ChannelReader<WindroseStateChange> SubscribeStateChanges(CancellationToken cancellationToken);
 }

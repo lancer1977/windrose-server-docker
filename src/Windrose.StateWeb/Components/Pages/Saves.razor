@@ -1,25 +1,176 @@
 ﻿@page "/saves"
 @rendermode InteractiveServer
 @inject IWindroseStateStore Store
-
-@{
-    var state = Store.GetState();
-    var save = state.Save;
-}
+@implements IDisposable
 
 <MudStack Spacing="3">
-    <MudText Typo="Typo.h4">Saves</MudText>
-    <MudPaper Class="pa-4" Elevation="1">
-        <MudSimpleTable Dense="true">
-            <tbody>
-                <tr><td>Active Island</td><td class="mono">@(save.ActiveIslandId ?? state.CurrentIslandId ?? "-")</td></tr>
-                <tr><td>World Name</td><td>@(save.WorldName ?? "-")</td></tr>
-                <tr><td>World Preset</td><td>@(save.WorldPresetType ?? "-")</td></tr>
-                <tr><td>Latest Backup</td><td class="mono">@(save.LatestBackupPath ?? "-")</td></tr>
-                <tr><td>Backup Time</td><td>@(save.LatestBackupTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td></tr>
-                <tr><td>Backup Size</td><td>@(save.LatestBackupSizeBytes is null ? "-" : $"{save.LatestBackupSizeBytes / 1024 / 1024:N1} MB")</td></tr>
-                <tr><td>Error</td><td>@(save.Error ?? "-")</td></tr>
-            </tbody>
-        </MudSimpleTable>
-    </MudPaper>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4">Saves</MudText>
+        <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
+    </MudStack>
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Latest Backup</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Active Island</td><td class="mono">@(save.ActiveIslandId ?? state.CurrentIslandId ?? "-")</td></tr>
+                        <tr><td>World Island</td><td class="mono">@(save.WorldIslandId ?? "-")</td></tr>
+                        <tr><td>World Name</td><td>@(save.WorldName ?? "-")</td></tr>
+                        <tr><td>World Preset</td><td>@(save.WorldPresetType ?? "-")</td></tr>
+                        <tr><td>Checkpoint Format</td><td>@(save.CheckpointContainerFormat ?? "-")</td></tr>
+                        <tr><td>Latest Backup</td><td class="mono">@(save.LatestBackupPath ?? "-")</td></tr>
+                        <tr><td>Backup Time</td><td>@(save.LatestBackupTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</td></tr>
+                        <tr><td>Backup Size</td><td>@(save.LatestBackupSizeBytes is null ? "-" : $"{save.LatestBackupSizeBytes / 1024 / 1024:N1} MB")</td></tr>
+                        <tr><td>World Settings</td><td>@WorldSettingsLabel()</td></tr>
+                        <tr><td>Error</td><td>@(save.Error ?? "-")</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Save Collections</MudText>
+                <MudTable Items="save.CollectionSummaries" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Count</MudTh>
+                        <MudTh>Total Size</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Name</MudTd>
+                        <MudTd>@context.Count</MudTd>
+                        <MudTd>@($"{context.TotalBytes / 1024d / 1024d:N1} MB")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Inspectable JSON Documents</MudText>
+                <MudTable Items="save.DocumentSummaries" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Path</MudTh>
+                        <MudTh>Size</MudTh>
+                        <MudTh>Scalars</MudTh>
+                        <MudTh>Objects</MudTh>
+                        <MudTh>Arrays</MudTh>
+                        <MudTh>Preview</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Kind</MudTd>
+                        <MudTd Class="mono">@context.Path</MudTd>
+                        <MudTd>@(context.SizeBytes is null ? "-" : $"{context.SizeBytes / 1024d:N1} KB")</MudTd>
+                        <MudTd>@context.ScalarPropertyCount</MudTd>
+                        <MudTd>@context.ObjectCount</MudTd>
+                        <MudTd>@context.ArrayCount</MudTd>
+                        <MudTd Class="text-wrap">@Preview(context)</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Checkpoint Entries</MudText>
+                <MudTable Items="save.CheckpointEntries.Take(12)" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Path</MudTh>
+                        <MudTh>Size</MudTh>
+                        <MudTh>Markers</MudTh>
+                        <MudTh>Tokens</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Kind</MudTd>
+                        <MudTd Class="mono">@context.Path</MudTd>
+                        <MudTd>@($"{context.SizeBytes / 1024d:N1} KB")</MudTd>
+                        <MudTd Class="text-wrap">@string.Join(", ", context.Markers.Take(6))</MudTd>
+                        <MudTd Class="text-wrap">@string.Join(", ", context.ReadableTokens.Take(6))</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Observed Families</MudText>
+                <MudTable Items="save.ObservedFamilies" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Notes</MudTh>
+                        <MudTh>Evidence</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Name</MudTd>
+                        <MudTd>@context.Status</MudTd>
+                        <MudTd Class="text-wrap">@context.Notes</MudTd>
+                        <MudTd Class="text-wrap">@string.Join(", ", context.Evidence)</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 </MudStack>
+
+@code {
+    private WindroseServerState state = new();
+    private SaveMetadata save = new();
+    private DateTimeOffset _lastRefresh = DateTimeOffset.Now;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = RefreshLoop(_cts.Token);
+    }
+
+    private async Task RefreshLoop(CancellationToken cancellationToken)
+    {
+        while (_timer is not null && await _timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await InvokeAsync(() =>
+            {
+                Refresh();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void Refresh()
+    {
+        state = Store.GetState();
+        save = state.Save;
+        _lastRefresh = DateTimeOffset.Now;
+    }
+
+    private string WorldSettingsLabel()
+    {
+        if (save.WorldSettingCount is null)
+        {
+            return "-";
+        }
+
+        return $"{save.WorldSettingCount} total ({save.WorldBoolSettingCount ?? 0} bool, {save.WorldFloatSettingCount ?? 0} float, {save.WorldTagSettingCount ?? 0} tag)";
+    }
+
+    private static string Preview(SaveDocumentSummary summary)
+    {
+        if (summary.ScalarPreview.Count == 0)
+        {
+            return summary.Notes ?? "-";
+        }
+
+        return string.Join("; ", summary.ScalarPreview.Take(3).Select(pair => $"{pair.Key}: {pair.Value}"));
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
+}

@@ -33,10 +33,16 @@ public sealed partial class WindroseLogParser : IWindroseLogParser
         if (line.Contains("Register server.", StringComparison.Ordinal) ||
             line.Contains("\"InviteCode\"", StringComparison.Ordinal) ||
             line.Contains("\"ServerName\"", StringComparison.Ordinal) ||
+            line.Contains("\"PersistentServerId\"", StringComparison.Ordinal) ||
+            line.Contains("\"IsPasswordProtected\"", StringComparison.Ordinal) ||
+            line.Contains("\"DirectConnectionProxyAddress\"", StringComparison.Ordinal) ||
+            line.Contains("\"DirectConnectionServerAddress\"", StringComparison.Ordinal) ||
             line.Contains("\"MaxPlayerCount\"", StringComparison.Ordinal) ||
             line.Contains("\"UseDirectConnection\"", StringComparison.Ordinal) ||
             line.Contains("\"DirectConnectionServerPort\"", StringComparison.Ordinal) ||
-            line.Contains("\"WorldIslandId\"", StringComparison.Ordinal))
+            line.Contains("\"WorldIslandId\"", StringComparison.Ordinal) ||
+            line.Contains("\"P2pProxyAddress\"", StringComparison.Ordinal) ||
+            line.Contains("\"UserSelectedRegion\"", StringComparison.Ordinal))
         {
             var property = ParseSettingsLine(line);
             if (property is not null)
@@ -177,6 +183,6 @@ public sealed partial class WindroseLogParser : IWindroseLogParser
     [GeneratedRegex(@"\[(?<value>\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}:\d{3})\]")]
     private static partial Regex TimestampRegex();
 
-    [GeneratedRegex("""["'](?<key>InviteCode|ServerName|WorldIslandId|MaxPlayerCount|UseDirectConnection|DirectConnectionServerPort)["']\s*:\s*(?<value>[^,\r\n]+)""")]
+    [GeneratedRegex("""["'](?<key>InviteCode|ServerName|WorldIslandId|MaxPlayerCount|UseDirectConnection|DirectConnectionServerPort|PersistentServerId|IsPasswordProtected|DirectConnectionProxyAddress|DirectConnectionServerAddress|P2pProxyAddress|UserSelectedRegion)["']\s*:\s*(?<value>[^,\r\n]+)""")]
     private static partial Regex JsonSettingRegex();
 }

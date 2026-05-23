@@ -9,6 +9,12 @@
 
   <ItemGroup>
     <PackageReference Include="MudBlazor" Version="9.4.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
+    <PackageReference Include="Seq.Extensions.Logging" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Windrose.StateWeb.Core\Windrose.StateWeb.Core.csproj" />
   </ItemGroup>
 
 </Project>

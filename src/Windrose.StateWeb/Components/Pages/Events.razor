@@ -1,23 +1,28 @@
 ﻿@page "/events"
 @rendermode InteractiveServer
 @inject IWindroseStateStore Store
+@implements IDisposable
 
 <MudStack Spacing="3">
-    <MudText Typo="Typo.h4">Events</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4">Events</MudText>
+        <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
+    </MudStack>
     <MudPaper Class="pa-4" Elevation="1">
-        <MudTable Items="Store.GetState().RecentEvents" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+        <MudText Typo="Typo.h6" Class="mb-3">Recent History</MudText>
+        <MudTable Items="_state.RecentHistory.OrderByDescending(item => item.Timestamp)" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
             <HeaderContent>
                 <MudTh>Time</MudTh>
+                <MudTh>Kind</MudTh>
                 <MudTh>Severity</MudTh>
                 <MudTh>Type</MudTh>
-                <MudTh>Player</MudTh>
                 <MudTh>Message</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.Timestamp.ToLocalTime().ToString("MM-dd HH:mm:ss")</MudTd>
+                <MudTd>@context.Category</MudTd>
                 <MudTd><MudChip T="string" Size="Size.Small" Color="@SeverityColor(context.Severity)">@context.Severity</MudChip></MudTd>
                 <MudTd>@context.Type</MudTd>
-                <MudTd>@(context.ClientName ?? Short(context.SessionId) ?? "-")</MudTd>
                 <MudTd>@context.Message</MudTd>
             </RowTemplate>
         </MudTable>
@@ -25,6 +30,37 @@
 </MudStack>
 
 @code {
+    private WindroseServerState _state = new();
+    private DateTimeOffset _lastRefresh = DateTimeOffset.Now;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = RefreshLoop(_cts.Token);
+    }
+
+    private async Task RefreshLoop(CancellationToken cancellationToken)
+    {
+        while (_timer is not null && await _timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await InvokeAsync(() =>
+            {
+                Refresh();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void Refresh()
+    {
+        _state = Store.GetState();
+        _lastRefresh = DateTimeOffset.Now;
+    }
+
     private static Color SeverityColor(string severity) => severity switch
     {
         "Error" => Color.Error,
@@ -34,4 +70,11 @@
 
     private static string? Short(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Length <= 12 ? value : $"{value[..8]}...";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
 }
