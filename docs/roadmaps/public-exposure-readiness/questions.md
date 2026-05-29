@@ -2,17 +2,28 @@
 
 ## Scope
 
-- [ ] Is the goal public GitHub visibility, public container distribution, or both?
-- [ ] Should the repo favor self-hosting guidance or public SaaS-style deployment guidance?
-- [ ] Should the state web sidecar remain LAN-only unless a user adds protection, or should the repo ship a built-in auth option?
+Current answer: this repository is staying internal-only for the Windrose rollout, so public GitHub/container distribution is not the active goal.
+
+- Favor self-hosting guidance for the current docs.
+- Keep the state web sidecar LAN-only unless a user adds protection.
+- Do not ship a built-in auth option for the current rollout.
 
 ## Security
 
-- [ ] Which fields must be redacted from the operator dashboard by default?
-- [ ] Should invite codes and account ids remain visible only on trusted networks?
-- [ ] Is reverse-proxy auth enough, or do we want application-level auth later?
+Default redactions:
+
+- invite codes
+- account ids
+- player identifiers
+- host paths
+- private environment values
+
+Yes, invite codes and account ids should remain visible only on trusted networks.
+
+Reverse-proxy auth is enough for now; application-level auth can remain a future hardening step if public exposure ever becomes a real target.
 
 ## Documentation
 
-- [ ] Which local examples should be replaced with placeholders instead of deleted?
-- [ ] Should deployment examples reference a generic host or a concrete public endpoint pattern?
+Replace local examples with placeholders where possible instead of deleting them.
+
+Deployment examples should reference a generic host or private endpoint pattern, not a concrete public endpoint pattern.

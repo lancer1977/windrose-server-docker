@@ -12,6 +12,7 @@ var seqOptions = builder.Configuration.GetSection("Seq");
 
 builder.Services.Configure<WindroseStateOptions>(builder.Configuration.GetSection("WindroseState"));
 builder.Services.AddMudServices();
+builder.Services.AddSignalR();
 builder.Services.AddSingleton<IWindroseLogParser, WindroseLogParser>();
 builder.Services.AddSingleton<IWindroseStateStore, WindroseStateStore>();
 builder.Services.AddHostedService<WindroseLogTailer>();
@@ -19,6 +20,8 @@ builder.Services.AddHostedService<SaveMetadataReader>();
 builder.Services.AddSingleton<IWindroseHubConnectionFactory, DefaultWindroseHubConnectionFactory>();
 builder.Services.AddSingleton<IWindroseLivePushPublisher, SignalRWindroseLivePushPublisher>();
 builder.Services.AddHostedService<WindroseLivePushService>();
+builder.Services.AddSingleton<IWindroseStateHubPublisher, SignalRWindroseStateHubPublisher>();
+builder.Services.AddHostedService<WindroseStateHubBroadcastService>();
 
 builder.Logging.AddConsole();
 if (!string.IsNullOrWhiteSpace(seqOptions["ServerUrl"]) &&
@@ -44,6 +47,7 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 
 app.UseAntiforgery();
 
+app.MapWindroseStateHub();
 app.MapWindroseStateEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

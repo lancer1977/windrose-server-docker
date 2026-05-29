@@ -38,6 +38,7 @@ Document the current deployment shape for the Windrose state sidecar so operator
 - [x] `SEQ__SERVERURL`
 - [x] `SEQ__APIKEY`
 - [x] `SEQ__MINIMUMLEVEL`
+- [x] `WindroseState__RedactSensitiveMetadata`
 
 ## Operational Guidance
 

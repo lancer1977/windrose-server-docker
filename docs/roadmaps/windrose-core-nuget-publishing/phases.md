@@ -5,7 +5,7 @@
 - [x] Make the core library packable
 - [x] Add package metadata
 - [x] Add a package README
-- [x] Keep the local app on a project reference
+- [x] Switch the local app to a package reference
 
 ## Phase 2 - GitHub builder
 
@@ -16,7 +16,8 @@
 
 ## Phase 3 - Release execution
 
-- [ ] Configure the `NUGET_API_KEY` repository secret for future automated releases
+- [x] Configure the `NUGET_API_KEY` repository secret for future automated releases
 - [x] Publish the first package to nuget.org
-- [ ] Confirm the package page and version indexing on nuget.org
-- [ ] Write a short downstream consumer note for the next repo that adopts it
+- [x] Confirm the package page and version indexing on nuget.org
+- [x] Write a short downstream consumer note for the next repo that adopts it
+- [x] Write a release notes / versioning policy doc for future package releases

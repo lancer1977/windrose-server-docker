@@ -19,7 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Windrose.StateWeb\Windrose.StateWeb.csproj" />
+    <ProjectReference Include="..\..\src\Windrose.StateWeb\Windrose.StateWeb.csproj" AdditionalProperties="UseLocalWindroseCore=true" />
+    <ProjectReference Include="..\..\src\Windrose.StateWeb.Core\Windrose.StateWeb.Core.csproj" />
   </ItemGroup>
 
 </Project>

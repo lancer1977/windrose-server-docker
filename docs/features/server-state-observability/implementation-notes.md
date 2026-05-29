@@ -6,10 +6,12 @@
 - The latest backup ZIP is summarized in a read-only way: world preset fields, safe JSON previews, and collection counts are exposed without writing back into `server-files`.
 - Live state can be pushed out to `channel-cheevos` over SignalR when the `WindroseState__EnableChannelCheevosPush` and `WindroseState__ChannelCheevos*` settings are provided. The live-push target is now environment-driven so the same stack can select `dev`, `debug`, or `prod` hubs and webkeys without changing the application code.
 - The sidecar now uses the Microsoft logging pipeline with optional Seq forwarding when `Seq__ServerUrl` and `Seq__ApiKey` are configured; the provider is intentionally gated so it stays quiet until both values are present.
-- The SignalR client currently uses configurable method names and automatic reconnect, but the receiver-side `channel-cheevos` contract still needs confirmation.
+- The SignalR client uses configurable method names and automatic reconnect, and the receiver-side `channel-cheevos` contract is now confirmed on `windrose-state` with compatibility alias `hubs/windrose-state`.
 - The sender-side hub URL builder appends the shared `webkey` as an encoded query string and preserves existing query parameters.
-- The browser dashboard now polls the shared state store and surfaces the richer save/server summaries plus safe observed-family hints instead of only the initial log-derived view.
-- The overview and diagnostics pages now use a more deliberate shell and summary-card treatment so the highest-signal status is easier to scan.
+- The browser dashboard now listens to the shared state hub at `/hubs/windrose-state` for live updates and only uses the shared state store for its initial snapshot instead of polling on a timer.
+- The browser dashboard now includes a `/map` proof page that connects to the live SignalR hub and reuses the same read-only summary surfaces for browser-source-style operator previews.
+- The overview and players pages now also listen to the shared state hub for live updates instead of polling on a timer.
+- The overview, players, events, saves, diagnostics, and map pages now listen to the shared state hub at `/hubs/windrose-state` for live updates instead of polling on a timer.
 - The API surface now includes read-only health, state, player, event, save, server-description, and world-description endpoints plus an SSE event stream.
 - The API surface now also includes read-only history export, time-series export, and overlay-summary endpoints so lighter operator history and browser-source consumers can reuse the same safe JSON surface.
 - The API surface also includes a read-only observed-families summary endpoint for safe island, actor, and player-reference hints without claiming a ship decoder.
@@ -183,9 +185,9 @@ This suggests the save data is the best route for companion-like state, but deco
 
 Start with a parser that can ship quickly:
 
-- [ ] read-only mount of `server-files`
-- [ ] log-derived server/player state
-- [ ] JSON API
-- [ ] small browser UI
+- [x] read-only mount of `server-files`
+- [x] log-derived server/player state
+- [x] JSON API
+- [x] small browser UI
 
 Then add save decoding once the RocksDB format is understood.

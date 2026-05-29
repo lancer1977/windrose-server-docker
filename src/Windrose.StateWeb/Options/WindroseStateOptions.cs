@@ -23,6 +23,7 @@ public sealed class WindroseStateOptions
     public string? ChannelCheevosWebKeyProd { get; set; }
     public string ChannelCheevosStateMethod { get; set; } = "WindroseStateUpdate";
     public string ChannelCheevosEventMethod { get; set; } = "WindroseEvent";
+    public bool RedactSensitiveMetadata { get; set; }
 
     public string LogPath => Path.Combine(ServerFilesPath, LogRelativePath);
     public string SaveRootPath => Path.Combine(ServerFilesPath, SaveRootRelativePath);

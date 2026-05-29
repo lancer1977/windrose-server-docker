@@ -60,21 +60,21 @@ Preferred initial source for save inspection because it avoids reading the live 
 
 Responsibilities:
 
-- [ ] tail the active log
-- [ ] tolerate log rotation
-- [ ] parse known marker lines into structured events
-- [ ] maintain current server/player state
+- [x] tail the active log
+- [x] tolerate log rotation
+- [x] parse known marker lines into structured events
+- [x] maintain current server/player state
 - [x] write a compact state snapshot
 
 ### Save Snapshot Reader
 
 Responsibilities:
 
-- [ ] find the newest checkpoint ZIP
-- [ ] read `WorldDescription.json`
+- [x] find the newest checkpoint ZIP
+- [x] read `WorldDescription.json`
 - [x] extract checkpoint files to a temp path for analysis
-- [ ] inspect RocksDB keys and values
-- [ ] emit decoded world/player/ship/object data when safe
+- [x] inspect RocksDB keys and values
+- emit decoded world/player/ship/object data when safe
 
 ### Web API
 
@@ -101,11 +101,11 @@ GET /ws
 
 Initial views:
 
-- [ ] server status
-- [ ] active players
-- [ ] recent events
-- [ ] latest save/backup status
-- [ ] decoded world summary
+- [x] server status
+- [x] active players
+- [x] recent events
+- [x] latest save/backup status
+- [x] decoded world summary
 
 ### Live Push
 
@@ -135,21 +135,21 @@ RocksDB_v2_Backups/*_Latest.zip
 
 ## Safety Rules
 
-- [ ] Mount `server-files` read-only in the sidecar
-- [ ] Prefer checkpoint ZIPs over live RocksDB reads
-- [ ] Never modify `ServerDescription.json` from the observer
-- [ ] Never write inside `R5/Saved` from the observer
-- [ ] Treat account ids and client names as sensitive in public views
-- [ ] Keep the webserver LAN-only unless authentication is added
+- Mount `server-files` read-only in the sidecar
+- Prefer checkpoint ZIPs over live RocksDB reads
+- Never modify `ServerDescription.json` from the observer
+- Never write inside `R5/Saved` from the observer
+- Treat account ids and client names as sensitive in public views
+- Keep the webserver LAN-only unless authentication is added
 
 ## Open Technical Questions
 
-- [ ] Can the RocksDB values be decoded directly with standard RocksDB tooling?
+- Can the RocksDB values be decoded directly with standard RocksDB tooling?
 - [x] Is the checkpoint container a RocksDB block-based SST?
-- [ ] Are the per-value payloads JSON, protobuf, Unreal binary serialization, or a custom format?
-- [ ] Does Windrose+ already expose a map/state endpoint that should be reused?
-- [ ] Can the companion app WebSocket schema be observed from a Windows client and mirrored?
-- [ ] Which state should be real-time versus snapshot-based?
+- Are the per-value payloads JSON, protobuf, Unreal binary serialization, or a custom format?
+- Does Windrose+ already expose a map/state endpoint that should be reused?
+- Can the companion app WebSocket schema be observed from a Windows client and mirrored?
+- Which state should be real-time versus snapshot-based?
 
 ## Container Format Note
 

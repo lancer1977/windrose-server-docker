@@ -1,12 +1,19 @@
-﻿@page "/events"
+@page "/events"
 @rendermode InteractiveServer
+@using Microsoft.AspNetCore.SignalR.Client
+@using Windrose.StateWeb.Hubs
 @inject IWindroseStateStore Store
-@implements IDisposable
+@inject NavigationManager NavigationManager
+@inject ILogger<Events> Logger
+@implements IAsyncDisposable
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.h4">Events</MudText>
-        <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
+        <MudStack AlignItems="AlignItems.End" Spacing="0">
+            <MudText Typo="Typo.caption">Last update: @_lastUpdate.ToLocalTime().ToString("HH:mm:ss")</MudText>
+            <MudText Typo="Typo.caption">Hub: @_hubStatus</MudText>
+        </MudStack>
     </MudStack>
     <MudPaper Class="pa-4" Elevation="1">
         <MudText Typo="Typo.h6" Class="mb-3">Recent History</MudText>
@@ -31,34 +38,106 @@
 
 @code {
     private WindroseServerState _state = new();
-    private DateTimeOffset _lastRefresh = DateTimeOffset.Now;
-    private PeriodicTimer? _timer;
-    private CancellationTokenSource? _cts;
+    private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
+    private HubConnection? _hubConnection;
+    private string _hubStatus = "connecting";
+    private bool _disposed;
+    private bool _connectedToHub;
+    private CancellationTokenSource? _lifetimeCts;
 
     protected override void OnInitialized()
     {
-        Refresh();
-        _cts = new CancellationTokenSource();
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
-        _ = RefreshLoop(_cts.Token);
+        _state = Store.GetState();
+        _lastUpdate = DateTimeOffset.Now;
+        _lifetimeCts = new CancellationTokenSource();
     }
 
-    private async Task RefreshLoop(CancellationToken cancellationToken)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        while (_timer is not null && await _timer.WaitForNextTickAsync(cancellationToken))
+        if (!firstRender || _connectedToHub)
         {
-            await InvokeAsync(() =>
-            {
-                Refresh();
-                StateHasChanged();
-            });
+            return;
+        }
+
+        _connectedToHub = true;
+        await ConnectToHubAsync();
+    }
+
+    private async Task ConnectToHubAsync()
+    {
+        var hubUrl = NavigationManager.ToAbsoluteUri("/hubs/windrose-state");
+
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(hubUrl)
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<WindroseStateChange>(nameof(IWindroseStateHubClient.WindroseStateUpdate), HandleStateChangeAsync);
+            _hubConnection.Reconnecting += HandleReconnectingAsync;
+            _hubConnection.Reconnected += HandleReconnectedAsync;
+            _hubConnection.Closed += HandleClosedAsync;
+
+            _hubStatus = "connecting";
+            await InvokeAsync(StateHasChanged);
+
+            await _hubConnection.StartAsync(_lifetimeCts!.Token);
+            _hubStatus = "live";
+            Logger.LogInformation("Connected Events to Windrose state hub at {HubUrl}", hubUrl);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _hubStatus = "unavailable";
+            Logger.LogWarning(ex, "Failed to connect Events to Windrose state hub at {HubUrl}", hubUrl);
+            await InvokeAsync(StateHasChanged);
         }
     }
 
-    private void Refresh()
+    private Task HandleStateChangeAsync(WindroseStateChange change)
     {
-        _state = Store.GetState();
-        _lastRefresh = DateTimeOffset.Now;
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _state = change.State;
+        _lastUpdate = change.Timestamp;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleReconnectingAsync(Exception? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "reconnecting";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleReconnectedAsync(string? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "live";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleClosedAsync(Exception? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "disconnected";
+        return InvokeAsync(StateHasChanged);
     }
 
     private static Color SeverityColor(string severity) => severity switch
@@ -71,10 +150,16 @@
     private static string? Short(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Length <= 12 ? value : $"{value[..8]}...";
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _timer?.Dispose();
+        _disposed = true;
+        _lifetimeCts?.Cancel();
+
+        if (_hubConnection is not null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+
+        _lifetimeCts?.Dispose();
     }
 }

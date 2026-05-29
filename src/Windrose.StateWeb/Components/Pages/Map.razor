@@ -1,0 +1,374 @@
+@page "/map"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.SignalR.Client
+@using Windrose.StateWeb.Hubs
+@inject IWindroseStateStore Store
+@inject NavigationManager NavigationManager
+@inject ILogger<Map> Logger
+@implements IAsyncDisposable
+
+<PageTitle>Browser Map</PageTitle>
+
+<MudStack Spacing="3" Class="dashboard-shell">
+    <MudPaper Class="pa-5 dashboard-hero" Elevation="0">
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.h4">Browser Map</MudText>
+                    <MudText Typo="Typo.body2">
+                        Read-only browser-source proof built from the overlay summary and current state store.
+                        It stays summary-only and does not claim decoded ship or player documents.
+                    </MudText>
+                </MudStack>
+                <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.caption">Last update: @_lastUpdate.ToLocalTime().ToString("HH:mm:ss")</MudText>
+                    <MudText Typo="Typo.caption">Hub: @_hubStatus</MudText>
+                </MudStack>
+            </MudStack>
+
+            <div class="status-chip-row">
+                <MudChip T="string" Color="@ServerStatusColor" Variant="Variant.Filled">
+                    @(_state.IsReady ? "Ready" : "Starting")
+                </MudChip>
+                <MudChip T="string" Color="@LogStatusColor" Variant="Variant.Outlined">
+                    Log @(_state.LogAvailable ? "Available" : "Missing")
+                </MudChip>
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
+                    Island @(_state.CurrentIslandId ?? "unknown")
+                </MudChip>
+                <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">
+                    Players @PlayerCountLabel()
+                </MudChip>
+                <MudChip T="string" Color="@HubStatusColor" Variant="Variant.Outlined">
+                    Live @_hubStatus
+                </MudChip>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Overlay</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">/api/overlay/summary</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">browser-source friendly JSON</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Stream</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">/api/events/stream</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">SSE for downstream consumers</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Hub</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">/hubs/windrose-state</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">live push for this map page</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Backup</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@FormatAge(_state.Save.BackupAge)</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">latest observed archive age</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Boundary</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@ShipBoundaryLabel()</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">safe family hints only</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-2">Overlay Stage</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    This is the browser-source proof surface: compact, read-only, and suitable for a remote browser or OBS browser source.
+                </MudText>
+
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Server</td><td>@(_state.ServerName ?? "-")</td></tr>
+                        <tr><td>World</td><td>@(_state.Save.WorldName ?? "-")</td></tr>
+                        <tr><td>Preset</td><td>@(_state.Save.WorldPresetType ?? "-")</td></tr>
+                        <tr><td>Parser</td><td>@_state.ParserStatus</td></tr>
+                        <tr><td>Connected players</td><td>@PlayerCountLabel()</td></tr>
+                        <tr><td>Recent events</td><td>@_state.RecentEvents.Count</td></tr>
+                        <tr><td>Recent history</td><td>@_state.RecentHistory.Count</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+
+                <MudDivider Class="my-4" />
+
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Highlights</MudText>
+                <div class="status-chip-row">
+                    @foreach (var highlight in BuildHighlights())
+                    {
+                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">
+                            @highlight
+                        </MudChip>
+                    }
+                </div>
+
+                <MudProgressLinear Value="@PlayerOccupancyPercent" Color="Color.Primary" Rounded="true" Class="mt-4" />
+                <MudText Typo="Typo.caption" Class="summary-caption">@PlayerOccupancyLabel()</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-3">Browser-Source Notes</MudText>
+                <MudSimpleTable Dense="true">
+                    <tbody>
+                        <tr><td>Map route</td><td class="mono">/map</td></tr>
+                        <tr><td>Overlay JSON</td><td class="mono">/api/overlay/summary</td></tr>
+                        <tr><td>Live hub</td><td class="mono">/hubs/windrose-state</td></tr>
+                        <tr><td>SSE stream</td><td class="mono">/api/events/stream</td></tr>
+                        <tr><td>Boundary</td><td>summary-only; no decoded ship/player docs</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-3">Recent Events</MudText>
+                <MudTable Items="_state.RecentEvents.Take(6)" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Message</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudTd>
+                        <MudTd>@context.Type</MudTd>
+                        <MudTd>@context.Message</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 panel-card" Elevation="0">
+                <MudText Typo="Typo.h6" Class="mb-3">Recent History</MudText>
+                <MudTable Items="_state.RecentHistory.OrderByDescending(item => item.Timestamp).Take(6)" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Message</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudTd>
+                        <MudTd>@context.Type</MudTd>
+                        <MudTd>@context.Message</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>
+
+@code {
+    private WindroseServerState _state = new();
+    private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
+    private HubConnection? _hubConnection;
+    private string _hubStatus = "connecting";
+    private bool _disposed;
+    private bool _connectedToHub;
+    private CancellationTokenSource? _lifetimeCts;
+
+    protected override void OnInitialized()
+    {
+        _state = Store.GetState();
+        _lastUpdate = DateTimeOffset.Now;
+        _lifetimeCts = new CancellationTokenSource();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _connectedToHub)
+        {
+            return;
+        }
+
+        _connectedToHub = true;
+        await ConnectToHubAsync();
+    }
+
+    private async Task ConnectToHubAsync()
+    {
+        var hubUrl = NavigationManager.ToAbsoluteUri("/hubs/windrose-state");
+
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(hubUrl)
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<WindroseStateChange>(nameof(IWindroseStateHubClient.WindroseStateUpdate), HandleStateChangeAsync);
+            _hubConnection.Reconnecting += HandleReconnectingAsync;
+            _hubConnection.Reconnected += HandleReconnectedAsync;
+            _hubConnection.Closed += HandleClosedAsync;
+
+            _hubStatus = "connecting";
+            await InvokeAsync(StateHasChanged);
+
+            await _hubConnection.StartAsync(_lifetimeCts!.Token);
+            _hubStatus = "live";
+            Logger.LogInformation("Connected Browser Map to Windrose state hub at {HubUrl}", hubUrl);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _hubStatus = "unavailable";
+            Logger.LogWarning(ex, "Failed to connect Browser Map to Windrose state hub at {HubUrl}", hubUrl);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task HandleStateChangeAsync(WindroseStateChange change)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _state = change.State;
+        _lastUpdate = change.Timestamp;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleReconnectingAsync(Exception? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "reconnecting";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleReconnectedAsync(string? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "live";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleClosedAsync(Exception? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "disconnected";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private string PlayerCountLabel() =>
+        _state.MaxPlayers is null ? $"{ConnectedPlayers} connected" : $"{ConnectedPlayers} / {_state.MaxPlayers}";
+
+    private string PlayerOccupancyLabel() =>
+        _state.MaxPlayers is null or 0
+            ? "Player cap unavailable"
+            : $"{ConnectedPlayers} of {_state.MaxPlayers} slots active";
+
+    private double PlayerOccupancyPercent =>
+        _state.MaxPlayers is null or 0
+            ? 0
+            : Math.Clamp(ConnectedPlayers * 100d / _state.MaxPlayers.Value, 0, 100);
+
+    private int ConnectedPlayers => _state.Players.Count(player => player.IsConnected);
+
+    private IReadOnlyList<string> BuildHighlights()
+    {
+        var highlights = new List<string>
+        {
+            _state.IsReady ? "Server ready" : "Server starting",
+            $"Parser {_state.ParserStatus}",
+            $"{_state.Save.ObservedFamilies.Count} observed families",
+            $"{_state.RecentEvents.Count} recent events",
+            $"{_state.RecentHistory.Count} history entries"
+        };
+
+        if (!string.IsNullOrWhiteSpace(_state.CurrentIslandId))
+        {
+            highlights.Add($"Island {_state.CurrentIslandId}");
+        }
+
+        if (_state.Save.BackupAge is not null)
+        {
+            highlights.Add($"Backup {FormatAge(_state.Save.BackupAge)}");
+        }
+
+        return highlights;
+    }
+
+    private string ShipBoundaryLabel()
+    {
+        var shipFamily = _state.Save.ObservedFamilies.FirstOrDefault(family => family.Name == "ship-document");
+        return shipFamily is null
+            ? "Ship document not assessed"
+            : $"{shipFamily.Status}: {shipFamily.Notes}";
+    }
+
+    private static string FormatAge(TimeSpan? age)
+    {
+        if (age is null)
+        {
+            return "-";
+        }
+
+        if (age.Value.TotalMinutes < 1)
+        {
+            return $"{age.Value.Seconds}s ago";
+        }
+
+        if (age.Value.TotalHours < 1)
+        {
+            return $"{(int)age.Value.TotalMinutes}m ago";
+        }
+
+        return $"{(int)age.Value.TotalHours}h {age.Value.Minutes}m ago";
+    }
+
+    private Color ServerStatusColor => _state.IsReady ? Color.Success : Color.Warning;
+
+    private Color LogStatusColor => _state.LogAvailable ? Color.Info : Color.Error;
+
+    private Color HubStatusColor => _hubStatus switch
+    {
+        "live" => Color.Success,
+        "connecting" => Color.Warning,
+        "reconnecting" => Color.Warning,
+        "disconnected" => Color.Error,
+        _ => Color.Default
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        _lifetimeCts?.Cancel();
+
+        if (_hubConnection is not null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+
+        _lifetimeCts?.Dispose();
+    }
+}

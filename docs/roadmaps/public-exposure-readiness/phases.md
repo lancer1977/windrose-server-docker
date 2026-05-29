@@ -9,14 +9,18 @@
 
 ## Phase 2 - Public-Facing Boundary
 
-- [ ] Document which services are safe to expose
-- [ ] Document which services must remain private by default
-- [ ] Document recommended access control for the sidecar
-- [ ] Document what data is considered sensitive
+These are reference notes for a future public release. They are not required for the current internal-only Windrose rollout.
+
+- Safe to expose: read-only operator dashboard and API surfaces only, when intentionally published behind protection.
+- Private by default: state-web dashboard, server metadata, player metadata, and any deployment endpoints.
+- Recommended access control: keep the sidecar LAN-only unless reverse-proxy or app-level auth is added.
+- Sensitive data: invite codes, account ids, player identifiers, host paths, and private deployment values.
 
 ## Phase 3 - Release Readiness
 
-- [ ] Confirm compose examples still work after the doc scrub
-- [ ] Confirm the state web guidance is consistent with the deployment story
-- [ ] Add any code or config hardening that is still required for public release
-- [ ] Mark the repo ready for public publishing once the audit is clean
+These are also future-release items, not current rollout blockers.
+
+- Compose examples remain valid for the current internal deployment story.
+- State-web guidance is aligned with the current deployment docs and private-by-default posture.
+- Any future code or config hardening should be added only if public publishing becomes a real goal.
+- The repo is not being marked public-release ready at this time; it remains an internal Windrose deployment reference.

@@ -8,16 +8,21 @@ This release track is intentionally separate from deployment:
 
 - GitHub Actions owns packaging and publish
 - Azure DevOps or GitOps can still handle deployment independently
-- the in-repo app can keep its local `ProjectReference` to the core project
+- the in-repo app stays on a local project reference so the repo can build against the shared source while the package tracks release readiness
 
 ## Current Status
 
 - [x] The core project is packable and has package metadata
 - [x] A GitHub Actions workflow exists for release-time publish
 - [x] The package README documents the public contract surface
-- [ ] nuget.org API key secret is configured in GitHub for future automated releases
+- [x] The nuget.org API key secret is configured in GitHub for future automated releases
 - [x] First package publish has been completed successfully
-- [ ] At least one downstream consumer has switched to the package
+- [x] The package page and version indexing are confirmed on nuget.org
+- [x] A downstream consumer note exists for package migration
+- [x] At least one downstream consumer has switched to the package
+- [x] A release notes / versioning policy doc exists
+- [x] Release/tag notes for 0.1.1 exist
+- [x] Release/tag notes template exists for future Core package bumps
 
 ## What Is In Scope
 
@@ -25,13 +30,14 @@ This release track is intentionally separate from deployment:
 - [x] GitHub Actions release builder
 - [x] NuGet.org publish command
 - [x] README/package docs
-- [ ] Consumer migration guidance
-- [ ] Release notes / versioning policy
-- [ ] GitHub secret wiring for fully automated future releases
+- [x] Consumer migration guidance
+- [x] Release notes / versioning policy
+- [x] Release/tag notes for 0.1.1
+- [x] Release/tag notes template for future Core package bumps
+- [x] GitHub secret wiring for fully automated future releases
 
 ## What Is Not In Scope
 
-- [ ] Replacing local project references inside this repo
-- [ ] Changing the server deployment strategy
-- [ ] Moving the Docker image release process
-- [ ] Adding GitOps requirements for package publication
+- changing the server deployment strategy
+- moving the Docker image release process
+- adding GitOps requirements for package publication

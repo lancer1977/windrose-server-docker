@@ -1,9 +1,11 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using Windrose.StateWeb.Core.Abstractions;
 using Windrose.StateWeb.Core.Contracts;
 using Windrose.StateWeb.Core.Extensions;
 using Windrose.StateWeb.Core.Models;
 using Windrose.StateWeb.Domain;
+using Windrose.StateWeb.Options;
 using Windrose.StateWeb.State;
 
 namespace Windrose.StateWeb.Api;
@@ -26,14 +28,46 @@ public static class WindroseEndpoints
             });
         });
 
-        endpoints.MapGet("/api/state", (IWindroseStateStore store) => store.GetState());
-        endpoints.MapGet("/api/players", (IWindroseStateStore store) => store.GetState().Players);
-        endpoints.MapGet("/api/events", (IWindroseStateStore store) => store.GetState().RecentEvents);
-        endpoints.MapGet("/snapshot", (IWindroseStateStore store) => BuildOverlaySnapshot(store.GetState()));
-        endpoints.MapGet("/eventsrecent", (IWindroseStateStore store) => store.GetState().RecentHistory);
-        endpoints.MapGet("/events/recent", (IWindroseStateStore store) => store.GetState().RecentHistory);
-        endpoints.MapGet("/api/history", (IWindroseStateStore store) => store.GetState().RecentHistory);
-        endpoints.MapGet("/api/saves/latest", (IWindroseStateStore store) => store.GetState().Save);
+        endpoints.MapGet("/api/state", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return Results.Ok(state);
+        });
+        endpoints.MapGet("/api/players", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return Results.Ok(state.Players);
+        });
+        endpoints.MapGet("/api/events", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return Results.Ok(state.RecentEvents);
+        });
+        endpoints.MapGet("/snapshot", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return BuildOverlaySnapshot(state);
+        });
+        endpoints.MapGet("/eventsrecent", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return Results.Ok(state.RecentHistory);
+        });
+        endpoints.MapGet("/events/recent", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return Results.Ok(state.RecentHistory);
+        });
+        endpoints.MapGet("/api/history", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return Results.Ok(state.RecentHistory);
+        });
+        endpoints.MapGet("/api/saves/latest", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var save = MaybeRedact(store.GetState().Save, options.Value.RedactSensitiveMetadata);
+            return Results.Ok(save);
+        });
         endpoints.MapGet("/api/saves/latest/checkpoint", (IWindroseStateStore store) =>
         {
             var save = store.GetState().Save;
@@ -55,16 +89,18 @@ public static class WindroseEndpoints
                 observedFamilies = save.ObservedFamilies
             });
         });
-        endpoints.MapGet("/api/server/description", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/server/description", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var description = store.GetState().ServerDescription ?? store.GetState().Save.ServerDescription;
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            var description = state.ServerDescription ?? state.Save.ServerDescription;
             return description is null
                 ? Results.NotFound()
                 : Results.Ok(description);
         });
-        endpoints.MapGet("/api/world/description", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/world/description", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var save = store.GetState().Save;
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            var save = state.Save;
             return Results.Ok(new
             {
                 save.ActiveIslandId,
@@ -80,29 +116,29 @@ public static class WindroseEndpoints
                 save.ServerDescription
             });
         });
-        endpoints.MapGet("/api/world/entities", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/world/entities", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var save = store.GetState().Save;
+            var save = MaybeRedact(store.GetState().Save, options.Value.RedactSensitiveMetadata);
             return Results.Ok(BuildWorldSlice(save, ["island", "actor", "player-in-world-metadata", "ship-reference"], false));
         });
-        endpoints.MapGet("/api/world/players", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/world/players", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var save = store.GetState().Save;
+            var save = MaybeRedact(store.GetState().Save, options.Value.RedactSensitiveMetadata);
             return Results.Ok(BuildWorldSlice(save, ["player-in-world-metadata"], false));
         });
-        endpoints.MapGet("/api/world/ships", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/world/ships", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var save = store.GetState().Save;
+            var save = MaybeRedact(store.GetState().Save, options.Value.RedactSensitiveMetadata);
             return Results.Ok(BuildWorldSlice(save, ["ship-reference", "ship-document"], false));
         });
-        endpoints.MapGet("/api/world/actors", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/world/actors", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var save = store.GetState().Save;
+            var save = MaybeRedact(store.GetState().Save, options.Value.RedactSensitiveMetadata);
             return Results.Ok(BuildWorldSlice(save, ["actor"], false));
         });
-        endpoints.MapGet("/api/world/summary", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/world/summary", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var state = store.GetState();
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
             var save = state.Save;
             return Results.Ok(new
             {
@@ -121,31 +157,64 @@ public static class WindroseEndpoints
                 hasStandaloneShipDocument = save.ObservedFamilies.Any(family => family.Name == "ship-document" && family.Status == "present")
             });
         });
-        endpoints.MapGet("/api/history/export", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/runtime/control-surface", () =>
         {
-            var state = store.GetState();
+            return Results.Ok(new
+            {
+                readOnly = true,
+                observerSurface = "Windrose State Web",
+                executionSurface = "WindrosePlus",
+                approvalSurface = "ChannelCheevos / Hermes",
+                supportedNow = new[]
+                {
+                    "log and save observation",
+                    "overlay / summary snapshots",
+                    "live status push",
+                    "auditable operator request records"
+                },
+                deferred = new[]
+                {
+                    "chat injection",
+                    "entity spawning",
+                    "generic world mutation"
+                },
+                contract = new
+                {
+                    request = "ChannelCheevos / Hermes requests the action",
+                    approval = "Operator authorizes or revokes the request",
+                    execution = "WindrosePlus performs the live action",
+                    audit = "Every request and result is logged"
+                }
+            });
+        });
+        endpoints.MapGet("/api/history/export", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
+        {
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
             return Results.Ok(state.ToHistoryExport(DateTimeOffset.UtcNow));
         });
-        endpoints.MapGet("/api/history/timeseries", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/history/timeseries", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            var state = store.GetState();
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
             return Results.Ok(BuildTimeSeriesExport(state));
         });
-        endpoints.MapGet("/api/overlay/summary", (IWindroseStateStore store) =>
+        endpoints.MapGet("/api/overlay/summary", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
-            return Results.Ok(BuildOverlaySnapshot(store.GetState()));
+            var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
+            return Results.Ok(BuildOverlaySnapshot(state));
         });
 
-        endpoints.MapGet("/api/events/stream", async (HttpContext context, IWindroseStateStore store) =>
+        endpoints.MapGet("/api/events/stream", async (HttpContext context, IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
             context.Response.Headers.Append("Cache-Control", "no-cache");
             context.Response.Headers.Append("Content-Type", "text/event-stream");
 
             var reader = store.Subscribe(context.RequestAborted);
+            var redact = options.Value.RedactSensitiveMetadata;
             await foreach (var evt in reader.ReadAllAsync(context.RequestAborted))
             {
-                await context.Response.WriteAsync($"event: {evt.Type}\n", context.RequestAborted);
-                await context.Response.WriteAsync($"data: {JsonSerializer.Serialize(evt)}\n\n", context.RequestAborted);
+                var payload = redact ? RedactEvent(evt) : evt;
+                await context.Response.WriteAsync($"event: {payload.Type}\n", context.RequestAborted);
+                await context.Response.WriteAsync($"data: {JsonSerializer.Serialize(payload)}\n\n", context.RequestAborted);
                 await context.Response.Body.FlushAsync(context.RequestAborted);
             }
         });
@@ -163,6 +232,85 @@ public static class WindroseEndpoints
             hasDecodedDocuments,
             observedFamilies
         };
+    }
+
+    private static WindroseServerState MaybeRedact(WindroseServerState state, bool redactSensitiveMetadata)
+    {
+        return redactSensitiveMetadata ? RedactState(state) : state;
+    }
+
+    private static SaveMetadata MaybeRedact(SaveMetadata save, bool redactSensitiveMetadata)
+    {
+        return redactSensitiveMetadata ? RedactSaveMetadata(save) : save;
+    }
+
+    private static WindroseServerState RedactState(WindroseServerState state)
+    {
+        return state with
+        {
+            ServerName = RedactString(state.ServerName),
+            InviteCode = RedactString(state.InviteCode),
+            ServerDescription = RedactServerDescription(state.ServerDescription),
+            Save = RedactSaveMetadata(state.Save),
+            Players = state.Players.Select(RedactPlayer).ToArray(),
+            RecentEvents = state.RecentEvents.Select(RedactEvent).ToArray(),
+            RecentWarnings = state.RecentWarnings.Select(RedactEvent).ToArray(),
+            RecentHistory = state.RecentHistory.Select(RedactHistoryEntry).ToArray()
+        };
+    }
+
+    private static SaveMetadata RedactSaveMetadata(SaveMetadata save)
+    {
+        return save with
+        {
+            ServerDescription = RedactServerDescription(save.ServerDescription)
+        };
+    }
+
+    private static ServerDescriptionMetadata? RedactServerDescription(ServerDescriptionMetadata? description)
+    {
+        return description is null
+            ? null
+            : description with
+            {
+                ServerName = RedactString(description.ServerName),
+                InviteCode = RedactString(description.InviteCode)
+            };
+    }
+
+    private static PlayerConnectionState RedactPlayer(PlayerConnectionState player)
+    {
+        return player with
+        {
+            SessionId = RedactString(player.SessionId),
+            AccountId = RedactString(player.AccountId),
+            ClientName = RedactString(player.ClientName)
+        };
+    }
+
+    private static WindroseEvent RedactEvent(WindroseEvent evt)
+    {
+        return evt with
+        {
+            SessionId = RedactString(evt.SessionId),
+            AccountId = RedactString(evt.AccountId),
+            ClientName = RedactString(evt.ClientName)
+        };
+    }
+
+    private static WindroseTimelineEntry RedactHistoryEntry(WindroseTimelineEntry entry)
+    {
+        return entry with
+        {
+            SessionId = RedactString(entry.SessionId),
+            AccountId = RedactString(entry.AccountId),
+            ClientName = RedactString(entry.ClientName)
+        };
+    }
+
+    private static string? RedactString(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? value : "[redacted]";
     }
 
     private static string? FormatAge(TimeSpan? age)

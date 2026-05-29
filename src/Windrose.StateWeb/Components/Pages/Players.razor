@@ -1,13 +1,56 @@
 ﻿@page "/players"
 @rendermode InteractiveServer
+@using Microsoft.AspNetCore.SignalR.Client
+@using Windrose.StateWeb.Hubs
 @inject IWindroseStateStore Store
-@implements IDisposable
+@inject NavigationManager NavigationManager
+@inject ILogger<Players> Logger
+@implements IAsyncDisposable
 
 <MudStack Spacing="3">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-        <MudText Typo="Typo.h4">Players</MudText>
-        <MudText Typo="Typo.caption">Last refresh: @_lastRefresh.ToLocalTime().ToString("HH:mm:ss")</MudText>
-    </MudStack>
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h4">Players</MudText>
+                <MudText Typo="Typo.body2">Read-only connected and recent player view powered by the live Windrose hub.</MudText>
+            </MudStack>
+            <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.caption">Last update: @_lastUpdate.ToLocalTime().ToString("HH:mm:ss")</MudText>
+                <MudText Typo="Typo.caption">Hub: @_hubStatus</MudText>
+            </MudStack>
+        </MudStack>
+
+        <div class="status-chip-row mt-3">
+            <MudChip T="string" Color="@HubStatusColor" Variant="Variant.Outlined">Live @_hubStatus</MudChip>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">Connected @ConnectedCount()</MudChip>
+            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Recent @_state.Players.Count</MudChip>
+        </div>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Live Hub</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">/hubs/windrose-state</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">push updates, no timer polling</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Connected</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@ConnectedCount()</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">current sessions</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 summary-card" Elevation="0">
+                <MudText Typo="Typo.overline">Recent</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@_state.Players.Count</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption">known player rows</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
     <MudPaper Class="pa-4" Elevation="1">
         <MudText Typo="Typo.h6" Class="mb-3">Active and Recent Players</MudText>
         <MudTable Items="_state.Players.OrderByDescending(player => player.LastSeen)" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
@@ -37,43 +80,132 @@
 
 @code {
     private WindroseServerState _state = new();
-    private DateTimeOffset _lastRefresh = DateTimeOffset.Now;
-    private PeriodicTimer? _timer;
-    private CancellationTokenSource? _cts;
+    private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
+    private HubConnection? _hubConnection;
+    private string _hubStatus = "connecting";
+    private bool _disposed;
+    private bool _connectedToHub;
+    private CancellationTokenSource? _lifetimeCts;
 
     protected override void OnInitialized()
     {
-        Refresh();
-        _cts = new CancellationTokenSource();
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
-        _ = RefreshLoop(_cts.Token);
+        _state = Store.GetState();
+        _lastUpdate = DateTimeOffset.Now;
+        _lifetimeCts = new CancellationTokenSource();
     }
 
-    private async Task RefreshLoop(CancellationToken cancellationToken)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        while (_timer is not null && await _timer.WaitForNextTickAsync(cancellationToken))
+        if (!firstRender || _connectedToHub)
         {
-            await InvokeAsync(() =>
-            {
-                Refresh();
-                StateHasChanged();
-            });
+            return;
+        }
+
+        _connectedToHub = true;
+        await ConnectToHubAsync();
+    }
+
+    private async Task ConnectToHubAsync()
+    {
+        var hubUrl = NavigationManager.ToAbsoluteUri("/hubs/windrose-state");
+
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(hubUrl)
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<WindroseStateChange>(nameof(IWindroseStateHubClient.WindroseStateUpdate), HandleStateChangeAsync);
+            _hubConnection.Reconnecting += HandleReconnectingAsync;
+            _hubConnection.Reconnected += HandleReconnectedAsync;
+            _hubConnection.Closed += HandleClosedAsync;
+
+            _hubStatus = "connecting";
+            await InvokeAsync(StateHasChanged);
+
+            await _hubConnection.StartAsync(_lifetimeCts!.Token);
+            _hubStatus = "live";
+            Logger.LogInformation("Connected Players to Windrose state hub at {HubUrl}", hubUrl);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _hubStatus = "unavailable";
+            Logger.LogWarning(ex, "Failed to connect Players to Windrose state hub at {HubUrl}", hubUrl);
+            await InvokeAsync(StateHasChanged);
         }
     }
 
-    private void Refresh()
+    private Task HandleStateChangeAsync(WindroseStateChange change)
     {
-        _state = Store.GetState();
-        _lastRefresh = DateTimeOffset.Now;
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _state = change.State;
+        _lastUpdate = change.Timestamp;
+        return InvokeAsync(StateHasChanged);
     }
+
+    private Task HandleReconnectingAsync(Exception? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "reconnecting";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleReconnectedAsync(string? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "live";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleClosedAsync(Exception? _)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _hubStatus = "disconnected";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private int ConnectedCount() => _state.Players.Count(player => player.IsConnected);
 
     private static string Short(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "-" : value.Length <= 12 ? value : $"{value[..8]}...";
 
-    public void Dispose()
+    private Color HubStatusColor => _hubStatus switch
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _timer?.Dispose();
+        "live" => Color.Success,
+        "connecting" => Color.Warning,
+        "reconnecting" => Color.Warning,
+        "disconnected" => Color.Error,
+        _ => Color.Default
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        _lifetimeCts?.Cancel();
+
+        if (_hubConnection is not null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+
+        _lifetimeCts?.Dispose();
     }
 }

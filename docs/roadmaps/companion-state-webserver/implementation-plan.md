@@ -144,38 +144,38 @@ First screen: operator dashboard, not a landing page.
 
 Views:
 
-- [ ] Overview
-- [ ] Players
-- [ ] Events
-- [ ] Saves
-- [ ] Diagnostics
+- Overview
+- Players
+- Events
+- Saves
+- Diagnostics
 
 Overview cards:
 
-- [ ] server ready status
-- [ ] current island id
-- [ ] invite code
-- [ ] active player count
-- [ ] latest backup age
-- [ ] parser health
+- server ready status
+- current island id
+- invite code
+- active player count
+- latest backup age
+- parser health
 
 Player table columns:
 
-- [ ] display/client name
-- [ ] account id
-- [ ] player session id
-- [ ] connection phase
-- [ ] connected at
-- [ ] last seen
-- [ ] disconnect reason
+- display/client name
+- account id
+- player session id
+- connection phase
+- connected at
+- last seen
+- disconnect reason
 
 Events table columns:
 
-- [ ] timestamp
-- [ ] severity
-- [ ] event type
-- [ ] player/session
-- [ ] message
+- timestamp
+- severity
+- event type
+- player/session
+- message
 
 ## Parser Defaults
 
@@ -183,21 +183,21 @@ Parser should produce typed events, then reduce those events into current state.
 
 Initial event types:
 
-- [ ] `ServerStarted`
-- [ ] `ServerInitialized`
-- [ ] `ServerReady`
-- [ ] `ServerSettingsObserved`
-- [ ] `PlayerReserved`
-- [ ] `PlayerBlConnected`
-- [ ] `PlayerUeConnected`
-- [ ] `PlayerLoginRequested`
-- [ ] `PlayerJoined`
-- [ ] `PlayerDisconnected`
-- [ ] `SaveBackupRequested`
-- [ ] `SaveBackupFinished`
-- [ ] `ResourceUsageObserved`
-- [ ] `WarningObserved`
-- [ ] `ErrorObserved`
+- `ServerStarted`
+- `ServerInitialized`
+- `ServerReady`
+- `ServerSettingsObserved`
+- `PlayerReserved`
+- `PlayerBlConnected`
+- `PlayerUeConnected`
+- `PlayerLoginRequested`
+- `PlayerJoined`
+- `PlayerDisconnected`
+- `SaveBackupRequested`
+- `SaveBackupFinished`
+- `ResourceUsageObserved`
+- `WarningObserved`
+- `ErrorObserved`
 
 Merge key priority:
 
@@ -209,11 +209,11 @@ Merge key priority:
 
 Phase 2 reads metadata only:
 
-- [ ] active island id
-- [ ] latest backup ZIP path
-- [ ] latest backup timestamp
-- [ ] latest backup size
-- [ ] `WorldDescription.json`
+- active island id
+- latest backup ZIP path
+- latest backup timestamp
+- latest backup size
+- `WorldDescription.json`
 
 Phase 3 adds RocksDB decoding only after a spike proves values can be decoded safely.
 
@@ -225,7 +225,7 @@ Phase 1 is complete when:
 - [x] dashboard loads on port `8781`
 - [x] `/health` returns OK
 - [x] `/api/state` reports log path and parser status
-- [ ] server ready state appears after parsing real `R5.log`
+- server ready state appears after parsing real `R5.log`
 - [x] player login/join/disconnect events appear from fixture logs
 - [x] active player state is derived from parsed events
 - [x] tests cover the key log markers
@@ -239,9 +239,9 @@ Phase 2 is complete when:
 
 ## Explicit Non-Goals For First Build
 
-- [ ] public internet hardening
-- [ ] write access to server files
-- [ ] save editing
-- [ ] full map renderer
-- [ ] guaranteed live coordinates
-- [ ] companion app protocol compatibility
+- public internet hardening
+- write access to server files
+- save editing
+- full map renderer
+- guaranteed live coordinates
+- companion app protocol compatibility

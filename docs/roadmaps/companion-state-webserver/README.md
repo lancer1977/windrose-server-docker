@@ -26,19 +26,19 @@ The target is similar in spirit to the public Windrose companion app, but based 
 - [x] Safe `/api/world/entities`, `/api/world/players`, `/api/world/ships`, and `/api/world/actors` slices now exist, but they remain summary-only and do not claim decoded coordinates or ship/player documents.
 - [x] An overlay-friendly `/api/world/summary` route now exists for compact safe JSON without decoded ship/player claims.
 - [x] The `channel-cheevos` receiver now exposes the `windrose-state` hub plus compatibility alias `hubs/windrose-state`.
-- [ ] Companion-style player/map coordinates are not yet proven.
-- [ ] RocksDB payload format is not yet decoded.
-- [ ] Companion-style player/ship/actor document decoding is still summary-only until proven safe.
+- Companion-style player/map coordinates are not yet proven.
+- RocksDB payload format is not yet decoded.
+- Companion-style player/ship/actor document decoding is still summary-only until proven safe.
 
 ## Desired Outcome
 
-- [ ] A browser-accessible state dashboard
-- [ ] A JSON API for external tools
-- [ ] A live event stream for connects/disconnects
-- [ ] A save snapshot reader for richer world state
-- [ ] A read-only `ServerDescription.json` reader
-- [ ] Optional SignalR publishing to the operator stack
-- [ ] A path toward map/player/ship state if the data can be decoded
+- [x] A browser-accessible state dashboard
+- [x] A JSON API for external tools
+- [x] A live event stream for connects/disconnects
+- [x] A save snapshot reader for richer world state
+- [x] A read-only `ServerDescription.json` reader
+- [x] Optional SignalR publishing to the operator stack
+- A path toward map/player/ship state if the data can be decoded
 
 ## Documentation Links
 

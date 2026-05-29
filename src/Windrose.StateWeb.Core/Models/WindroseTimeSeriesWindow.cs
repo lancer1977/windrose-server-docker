@@ -1,8 +1,9 @@
+using Windrose.StateWeb.Core.Abstractions;
 using Windrose.StateWeb.Core.Contracts;
 
 namespace Windrose.StateWeb.Core.Models;
 
-public sealed record WindroseTimeSeriesWindow
+public sealed record WindroseTimeSeriesWindow : IWindroseTimeSeriesSource
 {
     public IReadOnlyList<WindroseTimelineEntry> History { get; init; } = [];
     public bool LogAvailable { get; init; }

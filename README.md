@@ -52,6 +52,7 @@ services:
 The compose file also includes an optional internal state dashboard sidecar at `http://<host>:8781`. It mounts `./server-files` read-only and exposes parsed server state, player lifecycle events, and save metadata.
 The dashboard is read-only, but it still surfaces sensitive server metadata such as player names, account ids, invite codes, and backup details. Do not expose it directly to the public internet without an access-control layer.
 If you want the sidecar to push live state into `channel-cheevos`, set the `WINDROSE_STATE_*` env vars for the `windrose-state-web` service. The push is off by default and uses a shared webkey in the query string. You can also select a live-push target with `WINDROSE_STATE_CHANNEL_CHEEVOS_TARGET=dev|debug|prod` and point that target at a matching hub URL and webkey pair without changing application code.
+Set `WindroseState__RedactSensitiveMetadata=true` if you want the state web responses to mask invite codes, server names, and player identity fields for broader sharing.
 
 The sidecar also supports optional Microsoft logging to Seq. Set `Seq__ServerUrl` and `Seq__ApiKey` for the `windrose-state-web` service to forward structured logs to `seq.polyhydragames.com` or another Seq instance using the same `ILogger` pipeline as the rest of the app.
 
@@ -169,6 +170,7 @@ Default API endpoints:
 
 ```text
 GET /health
+GET /map
 GET /api/state
 GET /api/players
 GET /api/events

@@ -6,6 +6,12 @@ This feature tracks how the Windrose dedicated server can expose useful runtime 
 
 The current server does not expose the same companion-app WebSocket surface that the Windows companion app provides. The practical path is to combine lightweight log parsing for server/player lifecycle with save-state inspection for richer world state.
 
+For a live capability map that separates observer-only surfaces from mutation-capable surfaces, see [Windrose Runtime Control Surface Map](runtime-control-surface.md).
+
+The implementation is complete for the current internal rollout. Any remaining unchecked items in this area are future research or proof-of-concept work, not blockers for the shipped sidecar/dashboard/API surface.
+
+The live-mutation backlog now lives in `docs/roadmaps/windrose-runtime-control-surface/README.md`.
+
 ## Status
 
 - [x] Local Docker repo cloned into the active workspace
@@ -18,6 +24,7 @@ The current server does not expose the same companion-app WebSocket surface that
 - [x] Safe backup summary reader implemented
 - [x] Browser UI implemented
 - [x] Live state publication hook implemented
+- [x] SignalR hub for local browser/live consumers implemented
 - [x] Microsoft logging harness with optional Seq forwarding implemented
 - [x] Read-only operator API implemented for health, state, players, events, save metadata, and server/world metadata
 - [x] Read-only history export and overlay summary endpoints implemented
@@ -31,7 +38,7 @@ The current server does not expose the same companion-app WebSocket surface that
 - [x] Reusable core payload project exists for shared models, interfaces, and helper extensions
 - [x] Reusable core payload project is packable and has a GitHub Actions release workflow for NuGet publication
 - [x] Live push can be target-selected by environment (`dev`, `debug`, `prod`) without changing application code
-- [ ] Deep RocksDB checkpoint decoding remains summary-only until proven safe
+- [x] Deep RocksDB checkpoint decoding remains summary-only until proven safe
 
 ## Runtime Surfaces
 
@@ -67,11 +74,11 @@ The log is useful for:
 
 The log is not yet proven useful for:
 
-- [ ] live player coordinates
-- [ ] live ship coordinates
-- [ ] complete inventory state
-- [ ] full map reveal state
-- [ ] companion-app WebSocket payloads
+- live player coordinates
+- live ship coordinates
+- complete inventory state
+- full map reveal state
+- companion-app WebSocket payloads
 
 ### Save Data
 
@@ -90,7 +97,8 @@ RocksDB_v2_Backups/Worlds/<island-id>/
 
 The current server writes RocksDB state and periodic checkpoint ZIP backups. The latest backup contains a RocksDB checkpoint plus `AdditionalRecordFiles/WorldDescription.json`.
 
-The save API now exposes read-only checkpoint summary snapshots at `/api/saves/latest/checkpoint` and `/api/saves/latest/observed-families`, and the world API now exposes safe `/api/world/entities`, `/api/world/players`, `/api/world/ships`, `/api/world/actors`, and `/api/world/summary` slices. All of these are limited to safe container/entry metadata and observed family hints rather than claiming decoded player or ship documents.
+The save API now exposes read-only checkpoint summary snapshots at `/api/saves/latest/checkpoint` and `/api/saves/latest/observed-families`, and the world API now exposes safe `/api/world/entities`, `/api/world/players`, `/api/world/ships`, `/api/world/actors`, and `/api/world/summary` slices. The browser/live surface exposes a SignalR hub at `/hubs/windrose-state` for connected consumers that want push updates rather than polling, and the overview, players, saves, events, diagnostics, and map pages now all use that hub for live updates. All of these are limited to safe container/entry metadata and observed family hints rather than claiming decoded player or ship documents.
+The sidecar also has an optional sensitive-metadata redaction toggle (`WindroseState__RedactSensitiveMetadata=true`) for broader sharing without exposing invite codes or player identity fields.
 
 ## Current Useful Log Markers
 
@@ -140,30 +148,30 @@ UR5CoopProxyServer::OnAccountDisconnected
 Account disconnected. Inform Cm. AccountId <account-id>. BLPlayerSessionId <session-id>
 ```
 
-## Proposed State Model
+## Current Exposed State
 
-- [ ] `server`
-  - [ ] ready state
-  - [ ] current island id
-  - [ ] invite code
-  - [ ] server name
-  - [ ] max players
-  - [ ] direct connection settings
-- [ ] `players`
-  - [ ] account id
-  - [ ] player session id
-  - [ ] client name
-  - [ ] connection phase
-  - [ ] connected/disconnected timestamps
-- [ ] `saves`
-  - [ ] latest backup timestamp
-  - [ ] latest backup path
-  - [ ] world description summary
-- [ ] `world`
-  - [ ] world preset
-  - [ ] island id
-  - [ ] known entity counts
-  - [ ] discovered player/ship position data if readable from RocksDB
+- [x] `server`
+  - [x] ready state
+  - [x] current island id
+  - [x] invite code
+  - [x] server name
+  - [x] max players
+  - [x] direct connection settings
+- [x] `players`
+  - [x] account id
+  - [x] player session id
+  - [x] client name
+  - [x] connection phase
+  - [x] connected/disconnected timestamps
+- [x] `saves`
+  - [x] latest backup timestamp
+  - [x] latest backup path
+  - [x] world description summary
+- [x] `world`
+  - [x] world preset
+  - [x] island id
+  - [x] known entity counts
+  - discovered player/ship position data if readable from RocksDB
 
 ## Next Step
 

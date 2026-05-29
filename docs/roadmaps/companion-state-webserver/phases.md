@@ -45,13 +45,13 @@ Goal: determine whether companion-like state can be extracted safely.
 - [x] Open extracted checkpoint read-only
 - [x] Enumerate keys and value sizes
 - [x] Identify document type prefixes
-- [ ] Identify `R5BLPlayer`
-- [ ] Identify `R5BLPlayerInWorld`
-- [ ] Identify `R5BLShip`
-- [ ] Identify high-value actor documents
+- Identify `R5BLPlayer`
+- Identify `R5BLPlayerInWorld`
+- Identify `R5BLShip`
+- Identify high-value actor documents
 - [x] Determine container format as RocksDB block-based SST
-- [ ] Decode one player/world document
-- [ ] Decode one ship document
+- Decode one player/world document
+- Decode one ship document
 - [x] Document what is readable and what is not
 
 Notes:
@@ -71,9 +71,9 @@ Goal: expose map/player/ship state if decoding proves viable.
 - [x] Add `/world/players` as a safe observed-family summary slice
 - [x] Add `/world/ships` as a safe observed-family summary slice
 - [x] Add `/world/actors` as a safe observed-family summary slice
-- [ ] Add WebSocket or SSE updates
-- [ ] Add browser map proof of concept
-- [ ] Add redaction controls
+- [x] Add WebSocket or SSE updates
+- [x] Add browser map proof of concept
+- [x] Add redaction controls
 - [x] Add overlay-friendly JSON endpoint
 - [x] Add lightweight broader-history JSON export
 - [x] Add lightweight time-series JSON export

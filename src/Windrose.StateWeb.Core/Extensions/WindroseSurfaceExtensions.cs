@@ -40,14 +40,14 @@ public static class WindroseSurfaceExtensions
         };
     }
 
-    public static WindroseTimeSeriesExport ToTimeSeriesExport(this WindroseTimeSeriesWindow window, DateTimeOffset generatedAt)
+    public static WindroseTimeSeriesExport ToTimeSeriesExport(this IWindroseTimeSeriesSource source, DateTimeOffset generatedAt)
     {
         var points = new List<WindroseTimeSeriesPoint>();
-        var history = window.History.OrderBy(entry => entry.Timestamp).ToArray();
-        var connectedPlayers = window.ConnectedPlayerCount;
-        var eventCount = window.EventCount;
+        var history = source.History.OrderBy(entry => entry.Timestamp).ToArray();
+        var connectedPlayers = source.ConnectedPlayerCount;
+        var eventCount = source.EventCount;
         var historyCount = 0;
-        var logAvailable = window.LogAvailable;
+        var logAvailable = source.LogAvailable;
 
         foreach (var entry in history)
         {
@@ -75,7 +75,7 @@ public static class WindroseSurfaceExtensions
             {
                 Timestamp = entry.Timestamp,
                 LogAvailable = logAvailable,
-                CurrentIslandId = entry.IslandId ?? window.CurrentIslandId,
+                CurrentIslandId = entry.IslandId ?? source.CurrentIslandId,
                 ConnectedPlayerCount = connectedPlayers,
                 EventCount = eventCount,
                 HistoryCount = historyCount
@@ -87,10 +87,10 @@ public static class WindroseSurfaceExtensions
             points.Add(new WindroseTimeSeriesPoint
             {
                 Timestamp = generatedAt,
-                LogAvailable = window.LogAvailable,
-                CurrentIslandId = window.CurrentIslandId,
-                ConnectedPlayerCount = window.ConnectedPlayerCount,
-                EventCount = window.EventCount,
+                LogAvailable = source.LogAvailable,
+                CurrentIslandId = source.CurrentIslandId,
+                ConnectedPlayerCount = source.ConnectedPlayerCount,
+                EventCount = source.EventCount,
                 HistoryCount = 0
             });
         }
@@ -103,5 +103,10 @@ public static class WindroseSurfaceExtensions
             SampleCount = points.Count,
             Points = points
         };
+    }
+
+    public static WindroseTimeSeriesExport ToTimeSeriesExport(this WindroseTimeSeriesWindow window, DateTimeOffset generatedAt)
+    {
+        return ((IWindroseTimeSeriesSource)window).ToTimeSeriesExport(generatedAt);
     }
 }

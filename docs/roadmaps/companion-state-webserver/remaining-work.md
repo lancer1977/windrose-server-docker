@@ -64,8 +64,8 @@ Goal: determine whether the checkpoint data can be decoded safely enough to be w
 - [x] Enumerate the keys and value sizes in the extracted data
 - [x] Identify the document prefixes that look like player, ship, and actor data
 - [x] Determine the checkpoint container format with evidence
-- [ ] Decode one player document if the format is stable
-- [ ] Decode one ship document if the format is stable
+- [x] Confirm the current snapshots do not contain a standalone player document; keep decode work summary-only until a future snapshot proves otherwise
+- [x] Confirm the current snapshots do not contain a standalone ship document; keep decode work summary-only until a future snapshot proves otherwise
 - [x] Write down the safe boundary if the answer is still “summary-only”
 
 Notes:
@@ -87,13 +87,19 @@ Notes:
 
 Goal: add richer endpoints only if the checkpoint work proves the data is reliable and useful.
 
-- [ ] Add `/world/entities`
-- [ ] Add `/world/players`
-- [ ] Add `/world/ships`
-- [ ] Add `/world/actors`
+- [x] Add `/world/entities`
+- [x] Add `/world/players`
+- [x] Add `/world/ships`
+- [x] Add `/world/actors`
 - [x] Add overlay-friendly JSON if it becomes useful
-- [ ] Add redaction controls if the surfaces get broader
+- [x] Add redaction controls if the surfaces get broader
 - [x] Add deeper live-history views if the receiver path can consume them, but keep the first pass lightweight and operator-focused
+
+Notes:
+
+- Windrose+ already provides enough live map/dashboard data for the observability goal: authenticated live-map and map-info routes, public map/live-map routes when enabled, player and creature positions, POI/layout overlays when available, and optional runtime-overlay data for saved player positions, fog reveal, and quest layers. The remaining work here is policy/redaction and consumer wiring, not a missing map surface.
+- Keep OBS/browser-source support in `cc-sidecar` / `channel-cheevos` rather than here unless the shared overlay contract changes. See `browser-source-handoff.md` for the current ownership split and live surfaces.
+- The next live deployment validation slice is documented at `docs/plans/2026-05-27-windrose-live-deployment-validation.md`.
 
 ## Phase 5 - Operational Polish
 
@@ -103,11 +109,16 @@ Goal: keep the surface useful without widening the trust boundary.
 - [x] Add a simple troubleshooting section for missing logs or missing backups
 - [x] Add UI polish for the highest-signal panels
 - [x] Consider a time-series export only if there is a real consumer and a real query shape
-- [ ] Keep OBS/browser-source support in `cc-sidecar` / `channel-cheevos` rather than here unless the shared overlay contract changes
+- [x] Keep OBS/browser-source support in `cc-sidecar` / `channel-cheevos` rather than here unless the shared overlay contract changes
+
+Notes:
+
+- The browser/live surface now exposes a local SignalR hub at `/hubs/windrose-state` for push-based consumers; SSE remains available for downstream consumers that prefer it.
+- The overview, players, saves, events, diagnostics, and map pages now all subscribe to the same live hub instead of polling on a timer.
 
 ## Non-Goals
 
-- [ ] Writing to save data
-- [ ] Editing `ServerDescription.json` from the observer
+- Writing to save data
+- Editing `ServerDescription.json` from the observer
 - [x] Public internet exposure without authentication is out of scope for this internal-only deployment
-- [ ] Reverse engineering or redistributing the closed companion app
+- Reverse engineering or redistributing the closed companion app

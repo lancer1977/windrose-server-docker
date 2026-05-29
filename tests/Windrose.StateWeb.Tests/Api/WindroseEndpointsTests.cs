@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Threading.Channels;
 using Windrose.StateWeb.Api;
 using Windrose.StateWeb.Core.Contracts;
+using Windrose.StateWeb.Options;
 using Windrose.StateWeb.Domain;
 using Windrose.StateWeb.State;
 
@@ -85,6 +87,31 @@ public sealed class WindroseEndpointsTests
     }
 
     [Fact]
+    public async Task RuntimeControlSurfaceEndpointSummarizesTheReadOnlyBoundary()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokeGetAsync(app, "/api/runtime/control-surface");
+
+        Assert.Contains("\"readOnly\":true", body);
+        Assert.Contains("\"observerSurface\":\"Windrose State Web\"", body);
+        Assert.Contains("\"executionSurface\":\"WindrosePlus\"", body);
+        Assert.Contains("\"chat injection\"", body);
+        Assert.Contains("\"contract\"", body);
+    }
+
+    [Fact]
+    public async Task HubEndpointIsMapped()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+
+        var endpoint = FindEndpoint(app.Services, "/hubs/windrose-state");
+
+        Assert.Equal("/hubs/windrose-state", endpoint.RoutePattern.RawText);
+    }
+
+    [Fact]
     public async Task RecentEventsAliasReturnsRecentHistory()
     {
         await using var app = CreateApp();
@@ -126,6 +153,23 @@ public sealed class WindroseEndpointsTests
 
         Assert.Contains("\"inviteCode\":\"dbcdevs\"", body);
         Assert.Contains("\"serverName\":\"Windrose Test\"", body);
+    }
+
+    [Fact]
+    public async Task RedactionModeMasksSensitiveMetadata()
+    {
+        await using var app = CreateApp(redactSensitiveMetadata: true);
+        await app.StartAsync();
+
+        var stateBody = await InvokeGetAsync(app, "/api/state");
+        var serverDescriptionBody = await InvokeGetAsync(app, "/api/server/description");
+        var snapshotBody = await InvokeGetAsync(app, "/snapshot");
+
+        Assert.DoesNotContain("Test Player", stateBody);
+        Assert.DoesNotContain("dbcdevs", stateBody);
+        Assert.Contains("[redacted]", stateBody);
+        Assert.Contains("[redacted]", serverDescriptionBody);
+        Assert.Contains("[redacted]", snapshotBody);
     }
 
     [Fact]
@@ -334,11 +378,17 @@ public sealed class WindroseEndpointsTests
         Assert.Contains("Test Player", body);
     }
 
-    private static WebApplication CreateApp(ChannelReader<WindroseEvent>? events = null)
+    private static WebApplication CreateApp(ChannelReader<WindroseEvent>? events = null, bool redactSensitiveMetadata = false)
     {
         var builder = WebApplication.CreateBuilder();
+        builder.Services.AddSignalR();
+        builder.Services.AddSingleton<IOptions<WindroseStateOptions>>(_ => Microsoft.Extensions.Options.Options.Create(new WindroseStateOptions
+        {
+            RedactSensitiveMetadata = redactSensitiveMetadata
+        }));
         builder.Services.AddSingleton<IWindroseStateStore>(_ => new StubStateStore(events));
         var app = builder.Build();
+        app.MapWindroseStateHub();
         app.MapWindroseStateEndpoints();
         return app;
     }

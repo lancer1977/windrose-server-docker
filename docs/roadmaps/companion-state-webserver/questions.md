@@ -1,27 +1,27 @@
-# Companion State Webserver Questions
+# Companion State Webserver Decisions
 
 ## Scope
 
-- [ ] Is the first deliverable a JSON API, browser dashboard, OBS overlay, or all three?
-- [ ] Should this live in this repo or a separate `windrose-state-webserver` repo?
-- [ ] Should the sidecar be generic for other Unreal dedicated servers?
+- First deliverable: JSON API plus browser dashboard; OBS/browser-source consumption comes after the read-only API is stable.
+- Keep this work in `windrose-server-docker` as a sidecar for the Windrose server stack rather than splitting it into a new repo.
+- Keep the first version Windrose-specific; generic Unreal support can be revisited after the Windrose path is stable.
 
 ## State
 
-- [ ] Which player state matters first: online/offline, name, account id, location, ship, inventory?
-- [ ] How fresh does the state need to be?
-- [ ] Is backup-cadence state enough for the first map view?
-- [ ] Should historical state be stored or only current state?
+- Prioritize online/offline status, player name, account id, current island/location, ship presence, and a compact inventory summary.
+- Live events should update within seconds; backup-derived snapshot state can lag behind slightly.
+- Use backup-cadence state for the first map view until live coordinates are proven.
+- Persist current state plus a short event timeline; do not introduce long-term history storage in the first pass.
 
 ## Deployment
 
-- [ ] Which port should the webserver expose?
-- [ ] Should Portainer own deployment?
-- [ ] Should this be reachable over `windrose.gaming.tools` or LAN-only?
-- [ ] What auth layer is acceptable for local use?
+- Default the webserver to port 8080.
+- Let Portainer own deployment for the sidecar.
+- Keep the service LAN-only by default; widen exposure only behind an approved auth layer.
+- Accept existing reverse-proxy auth if the environment already has it; otherwise stay LAN-only.
 
 ## Integration
 
-- [ ] Should the API mimic the companion app WebSocket if observed?
-- [ ] Should Channel Cheevos consume the endpoint?
-- [ ] Should an OBS browser source consume the endpoint directly?
+- Do not mimic the companion app WebSocket unless the protocol is actually observed and worth mirroring.
+- Have Channel Cheevos consume the read-only JSON endpoint only for operator-safe overlays and summaries.
+- Let an OBS browser source consume `/api/world/summary` directly when a simple overlay is needed.
