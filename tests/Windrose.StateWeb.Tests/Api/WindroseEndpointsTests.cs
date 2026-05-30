@@ -101,6 +101,25 @@ public sealed class WindroseEndpointsTests
     }
 
     [Fact]
+    public async Task RuntimeActionCapabilityReportSeparatesKnownUnsupportedFromEnabledActions()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokeGetAsync(app, "/api/runtime/action-capabilities");
+
+        Assert.Contains("\"readOnly\":true", body);
+        Assert.Contains("\"knownCount\":8", body);
+        Assert.Contains("\"enabledCount\":0", body);
+        Assert.Contains("\"disabledCount\":0", body);
+        Assert.Contains("\"unsupportedCount\":8", body);
+        Assert.Contains("\"enabledActionIds\":[]", body);
+        Assert.Contains("\"disabledActionIds\":[]", body);
+        Assert.Contains("\"status\":\"unsupported\"", body);
+        Assert.Contains("\"windrose.spawn.loot_drop\"", body);
+        Assert.Contains("native hook", body);
+    }
+
+    [Fact]
     public async Task HubEndpointIsMapped()
     {
         await using var app = CreateApp();

@@ -175,6 +175,8 @@ GET /api/state
 GET /api/players
 GET /api/events
 GET /api/events/stream
+GET /api/runtime/control-surface
+GET /api/runtime/action-capabilities
 GET /snapshot
 GET /eventsrecent
 GET /events/recent

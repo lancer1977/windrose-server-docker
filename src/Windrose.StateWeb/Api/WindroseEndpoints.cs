@@ -165,6 +165,7 @@ public static class WindroseEndpoints
                 observerSurface = "Windrose State Web",
                 executionSurface = "WindrosePlus",
                 approvalSurface = "ChannelCheevos / Hermes",
+                actionCapabilityReport = "/api/runtime/action-capabilities",
                 supportedNow = new[]
                 {
                     "log and save observation",
@@ -187,6 +188,7 @@ public static class WindroseEndpoints
                 }
             });
         });
+        endpoints.MapGet("/api/runtime/action-capabilities", () => Results.Ok(BuildRuntimeActionCapabilityReport()));
         endpoints.MapGet("/api/history/export", (IWindroseStateStore store, IOptions<WindroseStateOptions> options) =>
         {
             var state = MaybeRedact(store.GetState(), options.Value.RedactSensitiveMetadata);
@@ -312,6 +314,102 @@ public static class WindroseEndpoints
     {
         return string.IsNullOrWhiteSpace(value) ? value : "[redacted]";
     }
+
+    private static object BuildRuntimeActionCapabilityReport()
+    {
+        var knownActionIds = RuntimeActionCapabilities.Select(action => action.Id).ToArray();
+        var unsupportedActions = RuntimeActionCapabilities.Select(action => new
+        {
+            action.Id,
+            action.EventName,
+            action.DisplayName,
+            status = action.Status,
+            action.Reason
+        }).ToArray();
+
+        return new
+        {
+            readOnly = true,
+            source = "ChannelCheevos WindroseActionCatalog",
+            observerSurface = "Windrose State Web",
+            executionSurface = "WindrosePlus",
+            approvalSurface = "ChannelCheevos / Hermes",
+            knownCount = knownActionIds.Length,
+            enabledCount = 0,
+            disabledCount = 0,
+            unsupportedCount = unsupportedActions.Length,
+            knownActionIds,
+            enabledActionIds = Array.Empty<string>(),
+            disabledActionIds = Array.Empty<string>(),
+            unsupportedActions,
+            contract = new
+            {
+                request = "ChannelCheevos / Hermes requests the action",
+                approval = "Operator authorizes or revokes the request",
+                execution = "WindrosePlus performs the live action when a proven hook exists",
+                audit = "Every request and result is logged"
+            }
+        };
+    }
+
+    private sealed record RuntimeActionCapabilityDefinition(
+        string Id,
+        string EventName,
+        string DisplayName,
+        string Status,
+        string Reason);
+
+    private static readonly RuntimeActionCapabilityDefinition[] RuntimeActionCapabilities =
+    {
+        new(
+            "windrose.buff.speed_boost",
+            "windrose_action_buff_speed_boost",
+            "Speed Boost",
+            "unsupported",
+            "No native hook or first-class runtime API is proven for player buff mutation in the current runtime."),
+        new(
+            "windrose.buff.regen_boost",
+            "windrose_action_buff_regen_boost",
+            "Regen Boost",
+            "unsupported",
+            "No native hook or first-class runtime API is proven for player buff mutation in the current runtime."),
+        new(
+            "windrose.weather.storm_front",
+            "windrose_action_weather_storm_front",
+            "Storm Front",
+            "unsupported",
+            "Weather control is not exposed as a stable first-class API in the current runtime."),
+        new(
+            "windrose.world.toggle_safe_mode",
+            "windrose_action_world_toggle_safe_mode",
+            "Toggle Safe Mode",
+            "unsupported",
+            "No stable world-toggle command is documented in the current runtime-control surface."),
+        new(
+            "windrose.spawn.loot_drop",
+            "windrose_action_spawn_loot_drop",
+            "Loot Drop",
+            "unsupported",
+            "Spawn paths remain native-hook only until a proven WindrosePlus or upstream API exists."),
+        new(
+            "windrose.cosmetic.confetti",
+            "windrose_action_cosmetic_confetti",
+            "Confetti",
+            "unsupported",
+            "Cosmetic effects are not exposed as a stable first-class runtime API in this slice."),
+        new(
+            "windrose.system.emergency_stop",
+            "windrose_action_system_emergency_stop",
+            "Emergency Stop",
+            "unsupported",
+            "No live stop or kill control is exposed by the current runtime-control surface."),
+        new(
+            "windrose.system.catalog_sync",
+            "windrose_action_system_catalog_sync",
+            "Catalog Sync",
+            "unsupported",
+            "Manifest sync is a contract-only handshake and not an execution action in this runtime.")
+    };
 
     private static string? FormatAge(TimeSpan? age)
     {

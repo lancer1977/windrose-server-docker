@@ -32,6 +32,7 @@ The roadmap covers four capabilities:
 - [x] Enemy spawning has been disproven as a first-class Lua API; any spawn path remains native-hook only unless a future WindrosePlus surface appears.
 - [x] The minimum safe external mutation contract is documented in `operator-contract.md`.
 - [x] The ChannelCheevos/Hermes operator path for approved runtime actions is documented in `operator-contract.md`.
+- [x] The runtime action capability report endpoint now separates known, enabled, disabled, and unsupported actions with explicit reasons.
 
 ## Implementation Recommendations
 

@@ -63,6 +63,19 @@ The following are not currently documented as stable first-class APIs in the mat
 
 Those functions may still be possible through UE4SS hooks or native mod code, but they should be treated as reverse-engineering targets rather than assumed capabilities.
 
+## Runtime capability report
+
+`GET /api/runtime/action-capabilities` returns the current manifest-backed action support report.
+
+The report separates:
+
+- `knownActionIds` — actions cataloged by the ChannelCheevos Windrose manifest mirror
+- `enabledActionIds` — actions that are actually runnable in the current runtime
+- `disabledActionIds` — actions that are supported in principle but currently turned off
+- `unsupportedActions` — cataloged actions that still lack a proven runtime hook, with explicit reasons
+
+In the current slice, the manifest-backed Windrose actions are cataloged but unsupported; no action is claimed as enabled until a proven runtime hook exists.
+
 ## Recommended boundaries
 
 - Keep Windrose State Web read-only.
