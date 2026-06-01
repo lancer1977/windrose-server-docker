@@ -99,6 +99,8 @@ if [ "${GENERATE_SETTINGS:-true}" != "false" ]; then
     LogSuccess "Server config patched"
 fi
 
+run_world_description_updater
+
 if [ "${WINDROSE_PLUS_ENABLED:-false}" = "true" ]; then
     LogAction "Rebuilding Windrose+ override PAK"
     if ! /home/steam/server/build_windrose_plus_pak.sh; then

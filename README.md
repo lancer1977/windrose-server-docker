@@ -106,6 +106,7 @@ docker run -d \
 | `MAX_PLAYERS` | `10` | Maximum number of simultaneous players |
 | `P2P_PROXY_ADDRESS` | `127.0.0.1` | IP address the P2P proxy binds to. Use `127.0.0.1` (default) in Docker — the proxy is an internal socket and does not need to be reachable from outside the container |
 | `GENERATE_SETTINGS` | `true` | Set to `false` to skip all config generation and patching. The server will start using whatever is already in `ServerDescription.json` on disk or create a new one. |
+| `RUN_WORLD_DESCRIPTION_UPDATER` | `false` | Set to `true` to run `R5WorldDescriptionUpdater.exe` at startup. The container reads `WorldIslandId` from `ServerDescription.json`, finds the matching `WorldDescription.json`, and runs the updater before launch. |
 | `WINE_VERBOSE` | `false` | Set to `true` to enable verbose Wine logging. Useful for diagnosing Wine crashes. Enables `WINEDEBUG=+all` and surfaces Wine output directly in the container logs. |
 | `SERVER_ARGS` | `-log -STDOUT` | Extra arguments passed to the Windrose server executable. Use this to test flags like `-nullrhi` and `-nosound`. |
 | `DIAGNOSTIC_MODE` | `false` | Set to `true` to use a narrower Wine trace (`+seh,+tid,+timestamp`) and a diagnostic server launch (`-log -STDOUT -nullrhi -nosound`). |
@@ -312,7 +313,7 @@ Located at `server-files/R5/ServerDescription.json`. This file can only be edite
 
 ### WorldDescription.json
 
-Located at `server-files/R5/Saved/SaveProfiles/Default/RocksDB/<version>/Worlds/<world-id>/WorldDescription.json`. One file per world. This file can only be edited while the server is stopped.
+Located at `server-files/R5/Saved/SaveProfiles/Default/RocksDB_v2/<version>/Worlds/<world-id>/WorldDescription.json` (or legacy `RocksDB/<version>/...` on older installs). One file per world. This file can only be edited while the server is stopped.
 
 | Field | Description |
 |-------|-------------|

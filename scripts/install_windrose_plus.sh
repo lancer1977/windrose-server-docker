@@ -159,3 +159,4 @@ chown steam:steam "$CFG" 2>/dev/null || true
 
 echo "$WINDROSE_PLUS_VERSION" > "$MARKER"
 chown steam:steam "$MARKER" 2>/dev/null || true
+chmod 664 "$CFG" 2>/dev/null || true

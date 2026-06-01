@@ -42,10 +42,12 @@ chown -R steam:steam /home/steam/server-files
 term_handler() {
     if ! shutdown_server; then
         LogWarn "Server did not shutdown gracefully, forcing shutdown"
-        wineserver -k 2>/dev/null || true
+        su steam -c 'WINEPREFIX=/home/steam/.wine wineserver -k9' >/dev/null 2>&1 || true
+        # Anything belonging to steam is part of a dead wine session.
+        pkill -9 -u steam 2>/dev/null || true
     fi
     sleep 2
-    tail --pid="$killpid" -f 2>/dev/null
+    tail --pid="$killpid" -f /dev/null 2>/dev/null
 }
 
 trap 'term_handler' SIGTERM
@@ -60,6 +62,7 @@ export SERVER_PASSWORD="${SERVER_PASSWORD:-}"
 export MAX_PLAYERS="${MAX_PLAYERS:-10}"
 export P2P_PROXY_ADDRESS="${P2P_PROXY_ADDRESS:-}"
 export GENERATE_SETTINGS="${GENERATE_SETTINGS:-true}"
+export RUN_WORLD_DESCRIPTION_UPDATER="${RUN_WORLD_DESCRIPTION_UPDATER:-false}"
 export UE4SS_ENABLED="${UE4SS_ENABLED:-false}"
 export WINDROSE_PLUS_ENABLED="${WINDROSE_PLUS_ENABLED:-false}"
 export WINDROSE_PLUS_VERSION="${WINDROSE_PLUS_VERSION:-$WINDROSE_PLUS_VERSION_DEFAULT}"
@@ -68,7 +71,7 @@ export WINDROSE_PLUS_RCON_PASSWORD="${WINDROSE_PLUS_RCON_PASSWORD:-}"
 export WINE_VERBOSE="${WINE_VERBOSE:-false}"
 
 # Start the server as steam user
-su - steam -w "INVITE_CODE,USE_DIRECT_CONNECTION,SERVER_PORT,DIRECT_CONNECTION_PROXY_ADDRESS,USER_SELECTED_REGION,SERVER_NAME,SERVER_PASSWORD,MAX_PLAYERS,P2P_PROXY_ADDRESS,GENERATE_SETTINGS,UE4SS_ENABLED,WINDROSE_PLUS_ENABLED,WINDROSE_PLUS_VERSION,WINDROSE_PLUS_VERSION_DEFAULT,WINDROSE_PLUS_DASHBOARD_PORT,WINDROSE_PLUS_RCON_PASSWORD,WINE_VERBOSE" \
+su - steam -w "INVITE_CODE,USE_DIRECT_CONNECTION,SERVER_PORT,DIRECT_CONNECTION_PROXY_ADDRESS,USER_SELECTED_REGION,SERVER_NAME,SERVER_PASSWORD,MAX_PLAYERS,P2P_PROXY_ADDRESS,GENERATE_SETTINGS,RUN_WORLD_DESCRIPTION_UPDATER,UE4SS_ENABLED,WINDROSE_PLUS_ENABLED,WINDROSE_PLUS_VERSION,WINDROSE_PLUS_VERSION_DEFAULT,WINDROSE_PLUS_DASHBOARD_PORT,WINDROSE_PLUS_RCON_PASSWORD,WINE_VERBOSE" \
     -c "cd /home/steam/server && ./start.sh" &
 
 killpid="$!"
