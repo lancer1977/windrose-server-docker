@@ -4,6 +4,9 @@
 
 This roadmap now records follow-up research and future expansion ideas. The core internal Windrose state-web rollout is implemented; unchecked items below are only for future proof-of-concept work if the data or product direction changes.
 
+For the stable feature index, see `docs/features/README.md`.
+For future phased work across the repo, see `docs/roadmaps/README.md`.
+
 - [x] Add a log parser sidecar
 - [x] Add JSON endpoints for server and player state
 - [x] Add a minimal browser status view
@@ -38,3 +41,8 @@ This roadmap now records follow-up research and future expansion ideas. The core
 - Editing `ServerDescription.json` from the observer
 - Public internet exposure without authentication
 - Reverse engineering or redistributing the closed companion app
+
+## Completion Gate
+
+The observer-side feature is already shipped for the current rollout.
+Only reopen this roadmap with evidence that the save/data surface materially changed or that a new read-only capability needs to be proved before it is promoted into `docs/features/`.

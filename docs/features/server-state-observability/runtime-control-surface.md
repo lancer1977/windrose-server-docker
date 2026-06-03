@@ -99,3 +99,4 @@ In the current slice, the manifest-backed Windrose actions are cataloged but uns
 - `WindrosePlus/Scripts/main.lua`: public API setup and mod loading
 - `docs/features/server-state-observability/README.md`: observer surface overview
 - `docs/roadmaps/windrose-runtime-control-surface/README.md`: backlog for chat, spawn, mutation, and operator integration proof work
+- `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md`: single inventory of current, deferred, and speculative runtime actions

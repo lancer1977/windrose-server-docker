@@ -55,7 +55,9 @@ The roadmap covers four capabilities:
 
 - Feature overview: `docs/features/server-state-observability/README.md`
 - Capability map: `docs/features/server-state-observability/runtime-control-surface.md`
+- Possibility atlas: `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md`
 - Execution path: `docs/roadmaps/windrose-runtime-control-surface/execution-path.md`
 - ChannelCheevos integration tests: `docs/roadmaps/windrose-runtime-control-surface/channel-cheevos-integration-tests.md`
+- Channel-point redemption contract: `docs/roadmaps/windrose-runtime-control-surface/channel-point-redemption-contract.md`
 - Source docs: `docs/features/server-state-observability/architecture.md`
 - WindrosePlus docs root: `docs/` in the WindrosePlus repository

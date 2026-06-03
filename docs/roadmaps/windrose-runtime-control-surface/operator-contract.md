@@ -2,15 +2,16 @@
 
 ## Purpose
 
-Define the safe control-plane boundary for live Windrose actions.
+Define the safe control-plane boundary for live Windrose actions and the one canonical redemption contract used for v1 approval flows.
 
-This draft separates three concerns:
+This draft separates four concerns:
 
 - Windrose State Web: read-only observation, summaries, and live status.
-- WindrosePlus: execution surface for runtime actions.
-- ChannelCheevos / Hermes: approval and operator surfaces that request, review, and authorize actions.
+- ChannelCheevos: redemption intake, approval, rate limiting, moderation gate, and audit logging.
+- WindrosePlus or another write-capable/native-hook surface: the actual execution path for approved actions.
+- Hermes: operator surface only; it may request and review actions, but it must not become the transport bridge.
 
-## Ownership Model
+## Ownership model
 
 ### Windrose State Web
 
@@ -21,122 +22,205 @@ It can expose:
 - player state
 - saves and diagnostics
 - live updates for overlays and dashboards
+- a summary of the live control-surface posture
 
-It should not be the primary execution path for live mutation.
-
-### WindrosePlus
-
-Owns the execution surface for runtime actions.
-It is the place where a live action actually happens if the action is approved.
-
-Candidate action classes:
-
-- chat or announcement injection
-- entity or enemy spawning
-- world-state mutation
-- movement or gameplay adjustments already exposed by WindrosePlus commands
+It should not accept redemption intake, approval, or write-capable execution requests.
 
 ### ChannelCheevos
 
-Owns approval, review, audit, and operator policy.
-It should remain the source of truth for who may request, approve, reject, or revoke runtime actions.
+Owns the redemption workflow end to end:
 
-### Shared contract package
+- intake and normalization
+- idempotency and deduplication
+- rate limiting
+- moderation or policy gating
+- approval / denial / block decisions
+- audit persistence and operator review records
 
-`Windrose.StateWeb.Core` should carry the shared payloads and pure transforms that Windrose and its consumers agree on.
-It is the right place for:
+ChannelCheevos is the source of truth for whether a redemption is pending, approved, denied, blocked, expired, or executed.
 
-- `WindroseOverlaySnapshot`
-- `WindroseOverlaySnapshotContext`
-- `WindroseHistoryExport`
-- `WindroseTimeSeriesExport`
-- `WindroseTimeSeriesWindow`
-- `WindroseTimelineEntry`
-- `IWindroseOverlaySnapshotSource`
-- `IWindroseHistorySource`
-- `IWindroseTimeSeriesSource`
-- `WindroseSurfaceExtensions`
+### WindrosePlus / write-capable hook surface
 
-These are the payloads and adapters ChannelCheevos should import from NuGet instead of rebuilding locally.
-It is not the place for live execution, RCON auth, or ChannelCheevos-specific transport policy.
+Owns execution only.
+If a redemption is approved, ChannelCheevos sends it to WindrosePlus or another write-capable/native-hook surface for the actual announcement or other server-side action.
 
-If a consuming app needs a new field shape, add it here first so ChannelCheevos and other consumers do not reconstruct their own version of the contract.
+Approved execution is allowed to happen only after the canonical approval record exists.
 
 ### Hermes
 
 Acts as an operator client.
 It may request actions, show queue state, and display approvals or rejections.
-It should not sit between Windrose and the execution surface.
+It should not sit between ChannelCheevos and the execution surface.
 
-## Proposed Flow
+## Canonical redemption event shape
 
-1. A Windrose client or operator client submits a runtime-action request.
-2. ChannelCheevos stores the request in a per-instance or per-channel queue.
-3. An operator approves, rejects, or revokes the request.
-4. If approved, ChannelCheevos issues a scoped durable credential or action grant.
-5. WindrosePlus executes only the approved action.
-6. ChannelCheevos records the action outcome for audit and replay.
+The canonical v1 record shape is `windrose.channel_point_redemption.v1`.
+Use `docs/roadmaps/windrose-runtime-control-surface/channel-point-redemption-contract.md` as the normative contract for the full field list.
 
-## Request Types
+The important top-level fields are:
 
-The contract should keep action types explicit.
+- `schemaVersion`
+- `eventId`
+- `idempotencyKey`
+- `source`
+- `template`
+- `status`
+- `gate`
+- `metadata`
+- `audit`
 
-Initial action groups:
+### Source fields
 
-- `chat.broadcast`
-- `entity.spawn`
-- `world.mutate`
-- `server.admin`
+The source block captures the provider and viewer identity:
 
-The contract should not imply that every action is already available. Some actions may remain experimental or native-hook only until proven.
+- `provider`
+- `channelId`
+- `channelLogin`
+- `rewardId`
+- `rewardTitle`
+- `redemptionId`
+- `redeemedBy.userId`
+- `redeemedBy.userLogin`
+- `redeemedBy.displayName`
+- `redeemedAt`
 
-## State Machine
+### Template contract
 
-Recommended states:
+v1 is template-only.
+Announcement content is selected by `templateId` plus typed params.
+There is no free-form `message`, `body`, `text`, `raw`, or `markdown` field in the canonical request.
 
-- `pending`
+Allowed template IDs for v1:
+
+- `windrose.server_announcement.status.v1`
+
+That template accepts typed params such as:
+
+- `serverName`
+- `status`
+- `etaMinutes`
+- `audience`
+- `tone`
+
+New template IDs require a schema update and docs update before use.
+
+## Status and behavior
+
+The canonical lifecycle is:
+
+- `received`
+- `pending_approval`
 - `approved`
-- `rejected`
-- `revoked`
+- `denied`
+- `blocked`
+- `executed`
+- `failed`
 - `expired`
 
-Transition notes:
+### Success behavior
 
-- `pending -> approved` requires operator action.
-- `pending -> rejected` requires operator action.
-- `approved -> revoked` is allowed at any time.
-- `revoked` should force re-request before reuse.
-- `expired` should be treated as dead state, not a soft approval.
+1. ChannelCheevos receives the redemption and records `received`.
+2. It validates the schema, idempotency key, template ID, params, and rate limit.
+3. If moderation is required, the record becomes `pending_approval`.
+4. A moderator or policy engine can move the record to `approved`.
+5. ChannelCheevos dispatches the approved action to WindrosePlus or another write-capable hook surface.
+6. The execution result is recorded as `executed` with audit data attached.
 
-## Safety Rules
+Success audit fields should include:
 
-- Never collapse request submission and durable approval into one opaque step.
-- Never let Hermes become an unreviewed transport bridge.
-- Never let a write-capable action surface masquerade as read-only.
-- Log every request, approval, rejection, revocation, and execution result.
-- Keep raw bootstrap secrets out of logs and UI text.
-- Scope every approval to the minimum channel, instance, or action class needed.
+- `audit.actor`
+- `audit.decisionBy`
+- `audit.decisionAt`
+- `audit.decisionReason`
+- `audit.executedAt`
+- `audit.executionId`
+- `audit.executionOutcome`
 
-## Transport Guidance
+### Failure behavior
 
-For live Windrose state pushes:
+- `blocked` is used for invalid schema, duplicate idempotency key, unknown template, invalid params, rate limiting, or hard policy failure.
+- `denied` is used for explicit moderation rejection.
+- `failed` is used when the write-capable surface is unavailable or returns an error after approval.
+- `expired` is used when the approval window closes before an action is approved or executed.
 
-- Windrose should connect directly to ChannelCheevos over SignalR.
-- WindrosePlus should execute runtime actions locally on the server side.
-- Hermes should query or operate through ChannelCheevos, not proxy the Windrose connection.
+Each failure must retain the canonical record and its audit trail.
 
-This preserves a clean control plane:
+## Audit output fields and lookup surfaces
 
-- direct Windrose -> ChannelCheevos for approved state push and operator interaction
-- direct ChannelCheevos -> WindrosePlus for approved execution semantics
-- Hermes as an operator surface, not the transport bridge
+The durable audit record belongs in ChannelCheevos, not in Windrose State Web.
+State Web stays summary-only and can report the coarse posture of the surface, but it should not become the redemption audit store.
 
-## Open Questions
+Audit data should expose these fields for review and replay tooling:
 
-- Should chat and spawn use the same grant type, or separate grant types?
-- Should approvals be scoped by action class, instance, or both?
-- Should a granted action be one-shot or reusable until revoked?
-- Which actions belong in WindrosePlus versus ChannelCheevos-mediated coordination?
+- `eventId`
+- `idempotencyKey`
+- `status`
+- `source`
+- `template`
+- `gate`
+- `metadata.correlationId`
+- `metadata.requestId`
+- `metadata.moderationCaseId`
+- `metadata.auditTags`
+- `audit.actor`
+- `audit.decisionBy`
+- `audit.decisionAt`
+- `audit.decisionReason`
+- `audit.executedAt`
+- `audit.executionId`
+- `audit.executionOutcome`
+
+Planned or expected read-only surfaces:
+
+- ChannelCheevos operator review queue for pending/denied/blocked/executed redemptions
+- a ChannelCheevos read-only lookup endpoint such as `GET /api/channel-point/redemptions/{eventId}`
+- Windrose State Web `GET /api/runtime/control-surface` for a summary-only posture report
+
+## Proposed component responsibilities for the next implementation slice
+
+### `ChannelCheevos.RedemptionIntake`
+
+Owns:
+
+- intake of the channel-point redemption
+- idempotency lookup
+- schema validation
+- template allowlist validation
+- rate limiting
+- creation of the canonical record
+
+### `ChannelCheevos.RedemptionModeration`
+
+Owns:
+
+- queueing `pending_approval`
+- applying human or policy decisions
+- recording `approved`, `denied`, `blocked`, and `expired` transitions
+- linking moderation metadata into the audit record
+
+### `ChannelCheevos.RedemptionAuditStore`
+
+Owns:
+
+- durable persistence of the canonical record
+- operator lookup and replay-friendly reads
+- the record shape used by logs, review UI, and any future audit endpoint
+
+### `WindrosePlus.ServerAnnouncementExecutor`
+
+Owns:
+
+- the approved write-capable dispatch path
+- translation from the approved redemption record into the actual announcement or hook call
+- recording the execution ID and execution outcome back into the audit record
+
+### `Windrose.StateWeb.RuntimeControlSurfaceController`
+
+Owns:
+
+- read-only boundary reporting
+- surface status summaries
+- no redemption intake and no execution
 
 ## Recommendation
 

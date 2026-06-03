@@ -1,9 +1,15 @@
 # Windrose Server Docker Docs
 
+## Entry Points
+
+- [`Features`](features/README.md) — feature-focused docs and capability maps.
+- [`Roadmaps`](roadmaps/README.md) — phased backlog pages and completion notes.
+
 ## Features
 
 - [Server State Observability](features/server-state-observability/README.md) - log, save, and checkpoint surfaces for exposing dedicated-server state.
 - [Windrose Runtime Control Surface Map](features/server-state-observability/runtime-control-surface.md) - what WindrosePlus can observe, mutate, and still cannot do yet.
+- [Windrose Runtime Possibility Atlas](roadmaps/windrose-runtime-control-surface/possibility-atlas.md) - the canonical inventory of current, deferred, and speculative runtime actions.
 - [Windrose Runtime Control Surface Roadmap](roadmaps/windrose-runtime-control-surface/README.md) - the backlog for chat, spawn, mutation, and operator integration proof work.
 - [Windrose Runtime Control Surface Execution Path](roadmaps/windrose-runtime-control-surface/execution-path.md) - feasible Lua/RCON and shared-contract slices.
 - [Windrose Runtime Control Surface Operator Contract](roadmaps/windrose-runtime-control-surface/operator-contract.md) - the durable control-plane boundary for Windrose, ChannelCheevos, and Hermes.
@@ -20,6 +26,7 @@
 - [Companion State Webserver](roadmaps/companion-state-webserver/README.md) - phased plan for a browser/API surface similar in spirit to the companion app.
 - [Companion State Webserver Deployment Notes](roadmaps/companion-state-webserver/deployment.md) - current compose/env/deployment guidance for the sidecar.
 - [Companion State Webserver Remaining Work](roadmaps/companion-state-webserver/remaining-work.md) - the current open-item sequence after the v3 observability pass.
+- [Windrose Fork and Pipeline Path](roadmaps/windrose-fork-and-pipeline/README.md) - the fork/build/pipeline/cutover plan for operating Windrose from this repo.
 - [Windrose Core NuGet Publishing](roadmaps/windrose-core-nuget-publishing/README.md) - GitHub Actions packaging and publish flow for the shared `Windrose.StateWeb.Core` library.
 
 ## Prompts

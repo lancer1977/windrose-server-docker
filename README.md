@@ -9,6 +9,15 @@ Game server hosting · Fast RAM · High-speed internet · Eat lag for breakfast
 
 [Try our Windrose server hosting free for 2 days!](https://indifferentbroccoli.com/windrose-server-hosting)
 
+## Tags
+
+- docker
+- windrose-server-docker
+- server
+- dotnet
+- testing
+- windrose
+
 ## Windrose Dedicated Server Docker
 
 A Docker container for running a Windrose dedicated server. The server binary is Windows-only and runs via Wine.
@@ -17,8 +26,11 @@ A Docker container for running a Windrose dedicated server. The server binary is
 
 Additional implementation notes and planning docs live under [`docs/`](docs/README.md).
 
+- [`docs/features/`](docs/features/README.md) collects feature-focused docs and capability maps.
+- [`docs/roadmaps/`](docs/roadmaps/README.md) collects phased work, backlog notes, and completion guides.
 - [`docs/features/server-state-observability/`](docs/features/server-state-observability/README.md) tracks log, save, and checkpoint surfaces for exposing server state.
 - [`docs/roadmaps/companion-state-webserver/`](docs/roadmaps/companion-state-webserver/README.md) tracks the phased plan for a companion-style webserver/API.
+- [`docs/roadmaps/windrose-runtime-control-surface/`](docs/roadmaps/windrose-runtime-control-surface/README.md) tracks the live-mutation backlog, operator contract, and possibility atlas for WindrosePlus and future write-capable surfaces.
 - [`src/Windrose.StateWeb.Core/`](src/Windrose.StateWeb.Core/Windrose.StateWeb.Core.csproj) holds the reusable payload/response models and helper abstractions shared by Windrose and future consumers.
 - The shared core layer is packable and published to nuget.org from GitHub Actions for downstream consumers that should not depend on this repository as a sibling checkout.
 

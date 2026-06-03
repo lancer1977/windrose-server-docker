@@ -8,6 +8,12 @@ The current server does not expose the same companion-app WebSocket surface that
 
 For a live capability map that separates observer-only surfaces from mutation-capable surfaces, see [Windrose Runtime Control Surface Map](runtime-control-surface.md).
 
+## Docs entry points
+
+- [`docs/features/README.md`](../README.md) — the stable feature index for the repo.
+- [`docs/roadmaps/README.md`](../../roadmaps/README.md) — the phased work index for future or incomplete capability slices.
+- [`docs/roadmaps/windrose-runtime-control-surface/README.md`](../../roadmaps/windrose-runtime-control-surface/README.md) — the live-mutation backlog and operator-contract work that sits outside this observer feature.
+
 The implementation is complete for the current internal rollout. Any remaining unchecked items in this area are future research or proof-of-concept work, not blockers for the shipped sidecar/dashboard/API surface.
 
 The live-mutation backlog now lives in `docs/roadmaps/windrose-runtime-control-surface/README.md`.
@@ -175,4 +181,4 @@ Account disconnected. Inform Cm. AccountId <account-id>. BLPlayerSessionId <sess
 
 ## Next Step
 
-Work from `docs/roadmaps/companion-state-webserver/remaining-work.md` for the remaining contract, deployment, and decoding items. Keep any deeper checkpoint work behind the same read-only inspection path instead of expanding the write surface.
+Work from `docs/roadmaps/companion-state-webserver/remaining-work.md` for the remaining contract, deployment, and decoding items, and use `docs/roadmaps/README.md` as the hub for any future phased work. Keep any deeper checkpoint work behind the same read-only inspection path instead of expanding the write surface.
