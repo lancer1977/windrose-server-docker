@@ -1,9 +1,9 @@
 # Windrose/ChannelCheevos: channel-point server announcement redemption
 
 ## Board
-- Hermes board: `default`
-- Discovery card: `t_b5779706` (`triage`)
-- Implementation slice card: `t_5375b0f3` (`ready`)
+- Hermes board: `game-harness`
+- Hermes Kanban: `t_d8f1bae6` (`done`) — channel-point announcement approval + audit envelope root
+- Contract child: `t_3348ef05` (`done`) — draft approval/audit contract for announcement redemptions
 
 ## Source truth
 - `docs/roadmaps/windrose-runtime-control-surface/operator-contract.md`

@@ -26,6 +26,7 @@ services:
     environment:
       WindroseState__ServerFilesPath: /server-files
       WindroseState__ServerDescriptionRelativePath: R5/ServerDescription.json
+      WindroseState__PluginBridgeRelativePath: ${WINDROSE_STATE_PLUGIN_BRIDGE_RELATIVE_PATH:-windrose_plugin_bridge}
       WindroseState__EnableChannelCheevosPush: ${WINDROSE_STATE_ENABLE_CHANNEL_CHEEVOS_PUSH:-false}
       WindroseState__ChannelCheevosTarget: ${WINDROSE_STATE_CHANNEL_CHEEVOS_TARGET:-prod}
       WindroseState__ChannelCheevosHubUrl: ${WINDROSE_STATE_CHANNEL_CHEEVOS_HUB_URL:-}

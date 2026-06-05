@@ -323,8 +323,9 @@ public static class WindroseEndpoints
             action.Id,
             action.EventName,
             action.DisplayName,
-            status = action.Status,
-            action.Reason
+            action.Status,
+            action.Reason,
+            hookContract = action.HookContract
         }).ToArray();
 
         return new
@@ -357,7 +358,15 @@ public static class WindroseEndpoints
         string EventName,
         string DisplayName,
         string Status,
-        string Reason);
+        string Reason,
+        RuntimeActionHookContract? HookContract = null);
+
+    private sealed record RuntimeActionHookContract(
+        string Seam,
+        string TargetSelector,
+        string[] PayloadFields,
+        string DryRunOutput,
+        string[] FailureModes);
 
     private static readonly RuntimeActionCapabilityDefinition[] RuntimeActionCapabilities =
     {
@@ -391,6 +400,18 @@ public static class WindroseEndpoints
             "Loot Drop",
             "unsupported",
             "Spawn paths remain native-hook only until a proven WindrosePlus or upstream API exists."),
+        new(
+            "windrose.spawn.dodo_swarm",
+            "windrose_action_spawn_dodo_swarm",
+            "Dodo Swarm",
+            "unsupported",
+            "Native hook only until the plugin-server bridge can resolve a target player and emit a typed spawn request.",
+            new RuntimeActionHookContract(
+                "HandleDodoSwarm",
+                "targetPlayer",
+                ["targetPlayer", "count", "radiusMeters", "offsetMeters", "creatureId", "creatureName"],
+                "Dry run should log the resolved target, count, radius/offset, creature id/name, and whether the hook was skipped or rejected.",
+                ["unknown target player", "invalid count or spawn radius", "hook unavailable", "unsafe live server state", "live execution without approval"])),
         new(
             "windrose.cosmetic.confetti",
             "windrose_action_cosmetic_confetti",

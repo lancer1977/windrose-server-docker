@@ -8,6 +8,11 @@
 #   WINDROSE_PLUS_VERSION            (default $WINDROSE_PLUS_VERSION_DEFAULT)
 #   WINDROSE_PLUS_VERSION_DEFAULT    (set by the Docker image)
 #   WINDROSE_PLUS_RCON_PASSWORD      (optional) — seeds windrose_plus.json on first run
+#   WINDROSE_SIDECAR_PLUGIN_ENABLED  (default false) — install Windrose sidecar bridge plugin
+#   WINDROSE_STATE_WEB_URL           (default http://windrose-state-web:8781) — sidecar URL passed to plugin
+#   WINDROSE_PLUGIN_BRIDGE_PATH      (default $SERVER_FILES/windrose_plugin_bridge) — plugin heartbeat/action path
+#   WINDROSE_SIDECAR_PLUGIN_MODE     (default dry-run-only) — plugin execution posture
+#   WINDROSE_SIDECAR_PLUGIN_SOURCE_DIR (default /home/steam/plugins/windrose-sidecar-bridge) — test/dev override
 #   SERVER_FILES                     (default /home/steam/server-files)
 #
 # Test/dev hook (unset in production):
@@ -15,9 +20,48 @@
 set -euo pipefail
 
 : "${WINDROSE_PLUS_ENABLED:=false}"
+: "${WINDROSE_SIDECAR_PLUGIN_ENABLED:=false}"
 : "${SERVER_FILES:=/home/steam/server-files}"
 : "${WINDROSE_PLUS_VERSION_DEFAULT:=}"
 : "${WINDROSE_PLUS_VERSION:=$WINDROSE_PLUS_VERSION_DEFAULT}"
+: "${WINDROSE_STATE_WEB_URL:=http://windrose-state-web:8781}"
+: "${WINDROSE_PLUGIN_BRIDGE_PATH:=$SERVER_FILES/windrose_plugin_bridge}"
+: "${WINDROSE_SIDECAR_PLUGIN_MODE:=dry-run-only}"
+: "${WINDROSE_SIDECAR_PLUGIN_SOURCE_DIR:=/home/steam/plugins/windrose-sidecar-bridge}"
+
+install_sidecar_bridge_plugin() {
+    [ "${WINDROSE_SIDECAR_PLUGIN_ENABLED}" = "true" ] || return 0
+
+    local source_dir="$WINDROSE_SIDECAR_PLUGIN_SOURCE_DIR"
+    local mods_friendly="$SERVER_FILES/windrose_plus_mods"
+    local target_dir="$mods_friendly/windrose-sidecar-bridge"
+
+    if [ ! -d "$source_dir" ]; then
+        echo "install_windrose_plus: sidecar bridge plugin source missing at $source_dir" >&2
+        return 1
+    fi
+
+    mkdir -p "$mods_friendly" "$WINDROSE_PLUGIN_BRIDGE_PATH/actions" "$WINDROSE_PLUGIN_BRIDGE_PATH/results"
+    rm -rf "$target_dir"
+    cp -R "$source_dir" "$target_dir"
+
+    local registry="$mods_friendly/mods_registry.json"
+    if [ -f "$registry" ]; then
+        tmp=$(mktemp)
+        jq --arg plugin "windrose-sidecar-bridge" 'if index($plugin) then . else . + [$plugin] end' "$registry" > "$tmp" && mv "$tmp" "$registry"
+    else
+        jq -n '["windrose-sidecar-bridge"]' > "$registry"
+    fi
+
+    jq -n \
+        --arg sidecarUrl "$WINDROSE_STATE_WEB_URL" \
+        --arg bridgePath "$WINDROSE_PLUGIN_BRIDGE_PATH" \
+        --arg mode "$WINDROSE_SIDECAR_PLUGIN_MODE" \
+        '{pluginId:"windrose-sidecar-bridge",sidecarUrl:$sidecarUrl,bridgePath:$bridgePath,mode:$mode,liveExecution:false}' \
+        > "$WINDROSE_PLUGIN_BRIDGE_PATH/config.json"
+
+    chown -R steam:steam "$target_dir" "$WINDROSE_PLUGIN_BRIDGE_PATH" "$registry" 2>/dev/null || true
+}
 
 if [ "$WINDROSE_PLUS_ENABLED" != "true" ]; then
     exit 0
@@ -44,6 +88,7 @@ if [ -n "${WINDROSE_PLUS_RCON_PASSWORD:-}" ] && [ -f "$CFG" ]; then
 fi
 
 if [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$WINDROSE_PLUS_VERSION" ]; then
+    install_sidecar_bridge_plugin
     exit 0
 fi
 
@@ -111,6 +156,7 @@ if [ ! -L "$MODS_REAL" ]; then
 fi
 chown -h steam:steam "$MODS_REAL" 2>/dev/null || true
 chown -R steam:steam "$MODS_FRIENDLY" 2>/dev/null || true
+install_sidecar_bridge_plugin
 
 # --- Swap tools/bin/{repak,retoc}.exe for Linux shims ---
 # WindrosePlus-BuildPak.ps1 invokes these via full path. On Linux pwsh cannot

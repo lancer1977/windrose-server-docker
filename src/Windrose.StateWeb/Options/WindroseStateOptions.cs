@@ -24,10 +24,16 @@ public sealed class WindroseStateOptions
     public string ChannelCheevosStateMethod { get; set; } = "WindroseStateUpdate";
     public string ChannelCheevosEventMethod { get; set; } = "WindroseEvent";
     public bool RedactSensitiveMetadata { get; set; }
+    public string PluginBridgeRelativePath { get; set; } = "windrose_plugin_bridge";
 
     public string LogPath => Path.Combine(ServerFilesPath, LogRelativePath);
     public string SaveRootPath => Path.Combine(ServerFilesPath, SaveRootRelativePath);
     public string ServerDescriptionPath => Path.Combine(ServerFilesPath, ServerDescriptionRelativePath);
+    public string PluginBridgePath => Path.Combine(ServerFilesPath, PluginBridgeRelativePath);
+    public string PluginBridgeStatusPath => Path.Combine(PluginBridgePath, "status.json");
+    public string PluginBridgeActionsPath => Path.Combine(PluginBridgePath, "actions");
+    public string PluginBridgeResultsPath => Path.Combine(PluginBridgePath, "results");
+    public string PluginBridgeConfigPath => Path.Combine(PluginBridgePath, "config.json");
 
     public string? ResolveChannelCheevosHubUrl()
     {

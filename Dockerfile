@@ -87,6 +87,7 @@ ENV HOME=/home/steam \
     UPDATE_ON_START=true
 
 COPY ./scripts /home/steam/server/
+COPY ./plugins /home/steam/plugins/
 COPY branding /branding
 
 RUN mkdir -p /home/steam/server-files && \

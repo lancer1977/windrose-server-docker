@@ -49,6 +49,7 @@ app.UseAntiforgery();
 
 app.MapWindroseStateHub();
 app.MapWindroseStateEndpoints();
+app.MapWindrosePluginBridgeEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

@@ -131,6 +131,8 @@ These are the ideas most worth exploring after the capability map is stable.
    - Classic “surprise event” idea.
    - Treat as native-hook-only until proven otherwise.
 
+   - The typed dodo-swarm seam is now documented as `HandleDodoSwarm` with `targetPlayer`, `count`, `radiusMeters`, `offsetMeters`, `creatureId`, and `creatureName` fields; it remains unsupported until a real native hook exists.
+
 9. **Chat or server-message injection**
    - Fun for immersion and crowd interaction.
    - Still speculative in the current docs.

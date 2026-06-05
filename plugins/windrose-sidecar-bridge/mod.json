@@ -1,0 +1,7 @@
+{
+  "name": "windrose-sidecar-bridge",
+  "version": "0.1.0",
+  "description": "Dry-run WindrosePlus plugin skeleton that publishes a heartbeat for the Windrose State Web sidecar and documents the native-hook action seam.",
+  "author": "Polyhydra Games",
+  "entry": "init.lua"
+}

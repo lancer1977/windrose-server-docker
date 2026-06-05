@@ -16,6 +16,26 @@ Make every native-plugin story junior-coder friendly by requiring:
 - a test or verification step as part of the story
 - a visible acceptance criterion that names the docs/test evidence
 
+Hermes Kanban: t_ee65fa7e
+
+## Repo docs/tests anchor map
+
+The current repo docs already carry the main verification trail for this sweep. The table below is the working crosswalk between the backlog stories and the repo paths that prove or defer each slice.
+
+| Story | Current proof / status | Command or path |
+|---|---|---|
+| native-plugin-1 runtime + load path | Documented in Windrose+ install docs and the install script; end-to-end live-server proof still needs a dedicated smoke run. | `README.md`, `scripts/install_windrose_plus.sh`, `scripts/build_windrose_plus_pak.sh` |
+| native-plugin-2 booting skeleton | Proven on the Alienware dev stack: local install/config smoke passes, UE4SS/WindrosePlus loads the bridge, and State Web reports `connected: true`. | `scripts/smoke_windrose_sidecar_bridge.sh`, `plugins/windrose-sidecar-bridge/README.md`, `docs/roadmaps/windrose-runtime-control-surface/execution-path.md`, `http://127.0.0.1:8782/api/plugin/status` on the dev host |
+| native-plugin-3 shared runtime plumbing | Docs already describe config reload, write paths, and observer boundaries; tests/probes still need expansion. | `README.md`, `docs/features/server-state-observability/runtime-control-surface.md` |
+| native-plugin-4 first visible server-side action | Deferred in the current docs; broadcast/chat remains a native-hook or future-upstream problem, not a stable Lua API. | `docs/roadmaps/windrose-runtime-control-surface/README.md`, `docs/roadmaps/windrose-runtime-control-surface/operator-contract.md`, `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md` |
+| native-plugin-5 packaging + rollback | Packaging and reinstall behavior are documented; rollback/disable stays tied to reinstall semantics and preserved mods/config. | `README.md`, `scripts/install_windrose_plus.sh`, `scripts/build_windrose_plus_pak.sh` |
+| native-plugin-6 verification matrix | Covered by the runtime-control-surface roadmap docs; this sweep makes the proof map explicit so the next coder can follow it without re-triage. | `docs/roadmaps/windrose-runtime-control-surface/execution-path.md`, `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md` |
+
+Open follow-ups that should stay visible instead of being buried:
+
+- native-plugin-2 has local installer/config proof plus dev-server UE4SS/WindrosePlus boot proof. Keep any future production rollout separate from this dev-only validation.
+- native-plugin-4 still needs a real write-capable hook or a documented native-mod path before it can be promoted from deferred/native-hook-only.
+
 ## Story rewrites
 
 ### native-plugin-1 — Decide runtime + load path for a dedicated-server native plugin, and document how it is verified

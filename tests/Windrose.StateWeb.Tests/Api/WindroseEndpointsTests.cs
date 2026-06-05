@@ -108,15 +108,119 @@ public sealed class WindroseEndpointsTests
         var body = await InvokeGetAsync(app, "/api/runtime/action-capabilities");
 
         Assert.Contains("\"readOnly\":true", body);
-        Assert.Contains("\"knownCount\":8", body);
+        Assert.Contains("\"knownCount\":9", body);
         Assert.Contains("\"enabledCount\":0", body);
         Assert.Contains("\"disabledCount\":0", body);
-        Assert.Contains("\"unsupportedCount\":8", body);
+        Assert.Contains("\"unsupportedCount\":9", body);
         Assert.Contains("\"enabledActionIds\":[]", body);
         Assert.Contains("\"disabledActionIds\":[]", body);
         Assert.Contains("\"status\":\"unsupported\"", body);
         Assert.Contains("\"windrose.spawn.loot_drop\"", body);
-        Assert.Contains("native hook", body);
+        Assert.Contains("\"windrose.spawn.dodo_swarm\"", body);
+        Assert.Contains("\"HandleDodoSwarm\"", body);
+        Assert.Contains("\"targetPlayer\"", body);
+        Assert.Contains("\"radiusMeters\"", body);
+        Assert.Contains("\"creatureId\"", body);
+        Assert.True(body.Contains("dry run should log the resolved target", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PluginManifestEndpointAdvertisesSidecarBridgeContract()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokeGetAsync(app, "/api/plugin/manifest");
+
+        Assert.Contains("\"pluginId\":\"windrose-sidecar-bridge\"", body);
+        Assert.Contains("\"protocolVersion\":\"windrose.plugin.sidecar.v1\"", body);
+        Assert.Contains("\"readOnlySidecar\":true", body);
+        Assert.Contains("\"dryRun\":\"/api/plugin/actions/dry-run\"", body);
+        Assert.Contains("\"windrose.spawn.dodo_swarm\"", body);
+        Assert.Contains("\"mode\":\"dry-run-only\"", body);
+    }
+
+    [Fact]
+    public async Task PluginStatusEndpointReportsMissingHeartbeatAsNotStarted()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokeGetAsync(app, "/api/plugin/status");
+
+        Assert.Contains("\"connected\":false", body);
+        Assert.Contains("\"status\":\"not-installed-or-not-started\"", body);
+        Assert.Contains("status.json", body);
+    }
+
+    [Fact]
+    public async Task PluginStatusEndpointReadsStartedHeartbeat()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"windrose-plugin-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(tempRoot, "windrose_plugin_bridge"));
+        await File.WriteAllTextAsync(
+            Path.Combine(tempRoot, "windrose_plugin_bridge", "status.json"),
+            """
+            {"pluginId":"windrose-sidecar-bridge","status":"started","startedAt":"2026-06-04T00:00:00Z","sidecarUrl":"http://127.0.0.1:8781","mode":"dry-run-only","message":"test heartbeat"}
+            """);
+
+        try
+        {
+            await using var app = CreateApp(serverFilesPath: tempRoot);
+            await app.StartAsync();
+            var body = await InvokeGetAsync(app, "/api/plugin/status");
+
+            Assert.Contains("\"connected\":true", body);
+            Assert.Contains("\"status\":\"started\"", body);
+            Assert.Contains("\"mode\":\"dry-run-only\"", body);
+            Assert.Contains("test heartbeat", body);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PluginDryRunEndpointValidatesDodoSwarmRequestWithoutExecuting()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokePostJsonAsync(app, "/api/plugin/actions/dry-run", """
+        {
+          "actionId": "windrose.spawn.dodo_swarm",
+          "targetPlayer": "Test Player",
+          "count": 12,
+          "radiusMeters": 18,
+          "offsetMeters": 3,
+          "creatureId": "R5.Creature.Dodo",
+          "creatureName": "Dodo"
+        }
+        """);
+
+        Assert.Contains("\"accepted\":true", body);
+        Assert.Contains("\"dryRun\":true", body);
+        Assert.Contains("\"executed\":false", body);
+        Assert.Contains("\"handler\":\"HandleDodoSwarm\"", body);
+        Assert.Contains("approvalRequired=true", body);
+    }
+
+    [Fact]
+    public async Task PluginDryRunEndpointRejectsInvalidDodoSwarmRequest()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokePostJsonAsync(app, "/api/plugin/actions/dry-run", """
+        {
+          "actionId": "windrose.spawn.dodo_swarm",
+          "targetPlayer": "",
+          "count": 0,
+          "radiusMeters": 0,
+          "offsetMeters": -1
+        }
+        """);
+
+        Assert.Contains("\"accepted\":false", body);
+        Assert.Contains("targetPlayer is required", body);
+        Assert.Contains("count must be between 1 and 50", body);
     }
 
     [Fact]
@@ -397,18 +501,20 @@ public sealed class WindroseEndpointsTests
         Assert.Contains("Test Player", body);
     }
 
-    private static WebApplication CreateApp(ChannelReader<WindroseEvent>? events = null, bool redactSensitiveMetadata = false)
+    private static WebApplication CreateApp(ChannelReader<WindroseEvent>? events = null, bool redactSensitiveMetadata = false, string? serverFilesPath = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSignalR();
         builder.Services.AddSingleton<IOptions<WindroseStateOptions>>(_ => Microsoft.Extensions.Options.Options.Create(new WindroseStateOptions
         {
-            RedactSensitiveMetadata = redactSensitiveMetadata
+            RedactSensitiveMetadata = redactSensitiveMetadata,
+            ServerFilesPath = serverFilesPath ?? "/server-files"
         }));
         builder.Services.AddSingleton<IWindroseStateStore>(_ => new StubStateStore(events));
         var app = builder.Build();
         app.MapWindroseStateHub();
         app.MapWindroseStateEndpoints();
+        app.MapWindrosePluginBridgeEndpoints();
         return app;
     }
 
@@ -418,6 +524,23 @@ public sealed class WindroseEndpointsTests
         var context = new DefaultHttpContext { RequestServices = app.Services };
         context.Request.Method = HttpMethods.Get;
         context.Request.Path = path;
+        context.Response.Body = new MemoryStream();
+
+        await endpoint.RequestDelegate!(context);
+
+        context.Response.Body.Position = 0;
+        using var reader = new StreamReader(context.Response.Body, Encoding.UTF8);
+        return await reader.ReadToEndAsync();
+    }
+
+    private static async Task<string> InvokePostJsonAsync(WebApplication app, string path, string json)
+    {
+        var endpoint = FindEndpoint(app.Services, path);
+        var context = new DefaultHttpContext { RequestServices = app.Services };
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Path = path;
+        context.Request.ContentType = "application/json";
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(json));
         context.Response.Body = new MemoryStream();
 
         await endpoint.RequestDelegate!(context);

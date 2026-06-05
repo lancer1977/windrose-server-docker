@@ -16,6 +16,8 @@ The roadmap covers four capabilities:
 3. General external live-state modification
 4. The operator contract that will eventually expose those actions safely to ChannelCheevos/Hermes clients
 
+This roadmap is also the docs mirror for the dodo-swarm priority sync on Hermes Kanban `t_810768ef`; it documents the approval-gated boundary only and does not approve or execute live dodo spawning.
+
 ## Current Assessment
 
 - [x] Read-only observation is already implemented and documented.

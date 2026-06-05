@@ -158,6 +158,11 @@ RCON password, admin Steam IDs, and feature flags are re-read live from `windros
 | `WINDROSE_PLUS_VERSION` | baked-in default | GitHub release tag of Windrose+ to install. Leave empty for the image default. |
 | `WINDROSE_PLUS_DASHBOARD_PORT` | `8780` | Port the web dashboard listens on inside the container. |
 | `WINDROSE_PLUS_RCON_PASSWORD` | (empty → random) | Dashboard login password. Only applied when `windrose_plus.json` does not exist yet. |
+| `WINDROSE_SIDECAR_PLUGIN_ENABLED` | `false` | Installs the repo-owned `windrose-sidecar-bridge` Windrose+ Lua plugin into `server-files/windrose_plus_mods/`. Requires `WINDROSE_PLUS_ENABLED=true`. |
+| `WINDROSE_STATE_WEB_URL` | `http://windrose-state-web:8781` | Sidecar URL written into the bridge plugin config and heartbeat context. |
+| `WINDROSE_PLUGIN_BRIDGE_PATH` | `/home/steam/server-files/windrose_plugin_bridge` | Shared path where the plugin writes `status.json` and reads future action/result files. |
+| `WINDROSE_SIDECAR_PLUGIN_MODE` | `dry-run-only` | Current bridge mode. Keep `dry-run-only` until a native Windrose spawn hook is proven and reviewed. |
+| `WINDROSE_STATE_PLUGIN_BRIDGE_RELATIVE_PATH` | `windrose_plugin_bridge` | State Web relative path, under `/server-files`, used to read plugin heartbeat/config files. |
 
 ### Seq logging
 
@@ -190,6 +195,9 @@ GET /api/events
 GET /api/events/stream
 GET /api/runtime/control-surface
 GET /api/runtime/action-capabilities
+GET /api/plugin/manifest
+GET /api/plugin/status
+POST /api/plugin/actions/dry-run
 GET /snapshot
 GET /eventsrecent
 GET /events/recent
@@ -218,6 +226,36 @@ The sidecar reads:
 ```
 
 The `server-files` mount is read-only inside the sidecar. The first build is intended for trusted networks only; add reverse-proxy auth, VPN access, or another protection layer before exposing it publicly.
+
+### Plugin / sidecar bridge
+
+The repo now includes a dry-run Windrose+ Lua plugin at `plugins/windrose-sidecar-bridge/`. When both `WINDROSE_PLUS_ENABLED=true` and `WINDROSE_SIDECAR_PLUGIN_ENABLED=true`, `scripts/install_windrose_plus.sh` copies it into `server-files/windrose_plus_mods/windrose-sidecar-bridge/`, creates `server-files/windrose_plugin_bridge/config.json`, and keeps the install idempotent on every restart.
+
+The bridge proves the plugin-to-sidecar lifecycle without live mutation:
+
+1. Windrose+ loads the Lua plugin from the friendly mods folder.
+2. The plugin writes `server-files/windrose_plugin_bridge/status.json` with its mode and sidecar URL.
+3. State Web reads that heartbeat through its read-only `/server-files` mount.
+4. Operators can inspect:
+   - `GET /api/plugin/manifest` for the sidecar/plugin contract.
+   - `GET /api/plugin/status` for the latest plugin heartbeat.
+   - `POST /api/plugin/actions/dry-run` for request validation and dry-run dodo-swarm logging.
+
+Example dry-run request:
+
+```shell
+curl -sS http://localhost:8781/api/plugin/actions/dry-run \
+  -H 'content-type: application/json' \
+  -d '{"actionId":"windrose.spawn.dodo_swarm","targetPlayer":"Test Player","count":8,"radiusMeters":12,"offsetMeters":2}'
+```
+
+A successful response returns `accepted: true`, `dryRun: true`, `executed: false`, and a log line containing `approvalRequired=true`. That is intentional: live dodo spawning remains blocked until a native Windrose spawn hook is proven, wired to ChannelCheevos approval/audit data, and reviewed.
+
+Troubleshooting:
+
+- `GET /api/plugin/status` returns `not-installed-or-not-started`: confirm `WINDROSE_PLUS_ENABLED=true`, `WINDROSE_SIDECAR_PLUGIN_ENABLED=true`, then restart the `windrose` service and check the server log for `[windrose-sidecar-bridge] loaded`.
+- The plugin is installed but the sidecar still reports disconnected: confirm both services mount the same `./server-files` directory and that `WINDROSE_PLUGIN_BRIDGE_PATH` matches `WINDROSE_STATE_PLUGIN_BRIDGE_RELATIVE_PATH` after container path translation.
+- Dry-run requests return validation errors: check `actionId`, `targetPlayer`, `count` (`1..50`), `radiusMeters` (`1..100`), and `offsetMeters` (`0..100`).
 
 The save reader now summarizes the latest backup ZIP instead of just the backup file metadata. It exposes safe JSON document previews, collection counts, world preset details, and `ServerDescription.json` fields while still avoiding any write access into the save tree.
 
