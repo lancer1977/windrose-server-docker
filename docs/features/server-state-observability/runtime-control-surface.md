@@ -26,7 +26,7 @@ Do not confuse the observer layer with the write layer. If a future feature need
 |---|---|---|
 | Observe server and world state | Yes | Windrose State Web already exposes logs, players, saves, world summary, and a SignalR live-update path for approved consumers. |
 | External broadcast / server messages | Not confirmed as a first-class Lua API | WindrosePlus docs show a deferred `wp.say` note. The admin module explicitly says `wp.kick / wp.netid / wp.say` are deferred to v1.3.0 because Lua-only UE4SS cannot call the native methods required for those actions. |
-| Spawn enemies / entities | Not confirmed as a first-class command | WindrosePlus exposes `registerHookWhenAvailable`, `discover`, `inspect`, `props`, and `settings` style reverse-engineering tools, plus world counters like `wp.creatures` and `wp.entities`. No documented spawn command was found in the current docs reviewed. |
+| Spawn enemies / entities | Dry-run placeholder only | WindrosePlus exposes `HandleDodoSwarm` as a dry-run seam with a Dodo/Wolf allowlist and random-selection support, but no first-class live spawn command is proven yet. The current docs still treat real spawning as native-hook-only until approval-gated execution exists. |
 | Modify live server state externally | Yes, in controlled ways | WindrosePlus already supports RCON, custom commands, config reload, teleport, speed, time, map export, map generation, and other admin workflows. |
 
 ## What is available today
@@ -58,7 +58,7 @@ WindrosePlus currently provides a write path through RCON and Lua mod commands. 
 The following are not currently documented as stable first-class APIs in the material reviewed:
 
 - external broadcast / server messages
-- enemy or NPC spawning
+- enemy or NPC spawning (the current docs only prove a dry-run `HandleDodoSwarm` seam with a Dodo/Wolf allowlist)
 - arbitrary world mutation via a generic server API
 
 Those functions may still be possible through UE4SS hooks or native mod code, but they should be treated as reverse-engineering targets rather than assumed capabilities.

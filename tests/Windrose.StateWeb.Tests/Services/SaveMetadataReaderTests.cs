@@ -51,7 +51,8 @@ public sealed class SaveMetadataReaderTests
                 archive,
                 "RocksDB/000123.sst",
                 """
-                R5BLPlayerInWorld R5BLPlayer R5BLShip R5BLActor_BuildingBlock Location Rotation Inventory Quest
+                R5BLPlayerInWorld R5BLPlayer R5BLAccount R5BLShip R5BLActor_BuildingBlock Location Rotation Inventory Equipment Hotbar Quest
+                AccountId PlayerId BLPlayerSessionId Stats Experience XP Progression Level SpawnType SpawnRecordId WorldLocation MapFog ScenarioSave
                 Blocks DataKey MarkupKey IslandId ShipId ChangeRevision _guid _meta _version
                 """);
 
@@ -122,20 +123,33 @@ public sealed class SaveMetadataReaderTests
         Assert.True(File.Exists(Path.Combine(metadata.CheckpointExtractedPath!, "AdditionalRecordFiles", "WorldDescription.json")));
         Assert.True(File.Exists(Path.Combine(metadata.CheckpointExtractedPath!, "AdditionalRecordFiles", "PlayerSnapshot.json")));
         Assert.Contains(metadata.CheckpointEntries, entry => entry.Path == "RocksDB/000123.sst");
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.Markers.Contains("R5BLPlayer"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.Markers.Contains("R5BLShip"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("R5BLPlayerInWorld"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("Blocks"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("DataKey"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("MarkupKey"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("IslandId"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("ShipId"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("ChangeRevision"));
-        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReadableTokens.Contains("WorldDescription"));
-        Assert.Equal(2, metadata.DocumentSummaries.Count);
-        Assert.Contains(metadata.DocumentSummaries, summary => summary.Kind == "world-description");
-        Assert.Contains(metadata.CollectionSummaries, summary => summary.Name == "player");
-        Assert.Contains(metadata.ObservedFamilies, family => family.Name == "ship-document" && family.Status == "not-observed");
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.RecordTypes.Contains("R5BLPlayer"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.RecordTypes.Contains("R5BLAccount"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.IdentityMarkers.Contains("AccountId"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.IdentityMarkers.Contains("BLPlayerSessionId"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.CandidatePortableMarkers.Contains("Experience"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.CandidatePortableMarkers.Contains("Hotbar"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReferenceMarkers.Contains("SpawnRecordId"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReferenceMarkers.Contains("WorldLocation"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.ReferenceMarkers.Contains("MapFog"));
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.Classification == "mixed");
+        Assert.Contains(metadata.CheckpointEntries, entry => entry.Notes is not null && entry.Notes.Contains("rekey rules", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("unsafe: identity and portable markers co-reside in the same SST entries; export/import would require explicit rekey rules", metadata.RecordGraph.Verdict);
+        Assert.True(metadata.RecordGraph.HasCrossLinkedIdentityAndPortableData);
+        Assert.False(metadata.RecordGraph.CanExportWithoutRekey);
+        Assert.Contains(metadata.RecordGraph.RecordTypes, token => token == "R5BLPlayer");
+        Assert.Contains(metadata.RecordGraph.RecordTypes, token => token == "R5BLAccount");
+        Assert.Contains(metadata.RecordGraph.IdentityMarkers, token => token == "AccountId");
+        Assert.Contains(metadata.RecordGraph.CandidatePortableMarkers, token => token == "Inventory");
+        Assert.Contains(metadata.RecordGraph.CandidatePortableMarkers, token => token == "Experience");
+        Assert.Contains(metadata.RecordGraph.ReferenceMarkers, token => token == "SpawnRecordId");
+        Assert.Contains(metadata.RecordGraph.CoLocatedEvidence, path => path == "RocksDB/000123.sst");
+        Assert.Contains(metadata.RecordGraph.Entries, entry => entry.Classification == "mixed" && entry.Path == "RocksDB/000123.sst");
+        Assert.Contains(metadata.ObservedFamilies, family => family.Name == "player-account-graph" && family.Status == "mixed");
+        Assert.Contains(metadata.ObservedFamilies, family => family.Name == "player-progressions" && family.Status == "candidate-portable");
+        Assert.Contains(metadata.ObservedFamilies, family => family.Name == "inventory-equipment-hotbar" && family.Status == "candidate-portable");
+        Assert.Contains(metadata.ObservedFamilies, family => family.Name == "spawn-location" && family.Status == "reference-only");
+        Assert.Contains(metadata.ObservedFamilies, family => family.Name == "ship-reference" && family.Status == "reference-only");
 
         Directory.Delete(root, true);
     }

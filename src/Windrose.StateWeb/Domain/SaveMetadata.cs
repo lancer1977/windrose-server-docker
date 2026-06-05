@@ -20,6 +20,7 @@ public sealed record SaveMetadata
     public IReadOnlyList<SaveDocumentSummary> DocumentSummaries { get; init; } = [];
     public IReadOnlyList<SaveCollectionSummary> CollectionSummaries { get; init; } = [];
     public IReadOnlyList<ObservedFamilySummary> ObservedFamilies { get; init; } = [];
+    public SaveRecordGraphReport RecordGraph { get; init; } = new();
     public string? Error { get; init; }
 
     public TimeSpan? BackupAge =>

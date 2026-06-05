@@ -44,6 +44,8 @@ The live-mutation backlog now lives in `docs/roadmaps/windrose-runtime-control-s
 - [x] Reusable core payload project exists for shared models, interfaces, and helper extensions
 - [x] Reusable core payload project is packable and has a GitHub Actions release workflow for NuGet publication
 - [x] Live push can be target-selected by environment (`dev`, `debug`, `prod`) without changing application code
+- [x] Windrose can poll ChannelCheevos read-only state at `/api/windrose/state` using the configured webkey and expose the local readback at `/api/channel-cheevos/state`
+- [x] Overview UI displays the ChannelCheevos poll status plus safe stream/channel details without rendering the raw webkey
 - [x] Deep RocksDB checkpoint decoding remains summary-only until proven safe
 
 ## Runtime Surfaces
@@ -104,6 +106,8 @@ RocksDB_v2_Backups/Worlds/<island-id>/
 The current server writes RocksDB state and periodic checkpoint ZIP backups. The latest backup contains a RocksDB checkpoint plus `AdditionalRecordFiles/WorldDescription.json`.
 
 The save API now exposes read-only checkpoint summary snapshots at `/api/saves/latest/checkpoint` and `/api/saves/latest/observed-families`, and the world API now exposes safe `/api/world/entities`, `/api/world/players`, `/api/world/ships`, `/api/world/actors`, and `/api/world/summary` slices. The browser/live surface exposes a SignalR hub at `/hubs/windrose-state` for connected consumers that want push updates rather than polling, and the overview, players, saves, events, diagnostics, and map pages now all use that hub for live updates. All of these are limited to safe container/entry metadata and observed family hints rather than claiming decoded player or ship documents.
+
+The ChannelCheevos readback path is also read-only. Enable it with `WindroseState__EnableChannelCheevosPolling=true`, set either `WindroseState__ChannelCheevosStateUrl*` or `WindroseState__ChannelCheevosBaseUrl*`/`ChannelCheevosHubUrl*`, and keep the webkey in `WindroseState__ChannelCheevosWebKey*`. The sidecar sends the key only as a query parameter to ChannelCheevos and renders the local readback without the raw secret. The local smoke endpoint is `/api/channel-cheevos/state`.
 The sidecar also has an optional sensitive-metadata redaction toggle (`WindroseState__RedactSensitiveMetadata=true`) for broader sharing without exposing invite codes or player identity fields.
 
 ## Current Useful Log Markers

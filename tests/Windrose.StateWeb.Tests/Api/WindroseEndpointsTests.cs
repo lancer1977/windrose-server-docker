@@ -9,6 +9,7 @@ using Windrose.StateWeb.Api;
 using Windrose.StateWeb.Core.Contracts;
 using Windrose.StateWeb.Options;
 using Windrose.StateWeb.Domain;
+using Windrose.StateWeb.Services;
 using Windrose.StateWeb.State;
 
 namespace Windrose.StateWeb.Tests.Api;
@@ -135,8 +136,38 @@ public sealed class WindroseEndpointsTests
         Assert.Contains("\"protocolVersion\":\"windrose.plugin.sidecar.v1\"", body);
         Assert.Contains("\"readOnlySidecar\":true", body);
         Assert.Contains("\"dryRun\":\"/api/plugin/actions/dry-run\"", body);
+        Assert.Contains("\"smokeOptions\":\"/api/plugin/smoke-options\"", body);
         Assert.Contains("\"windrose.spawn.dodo_swarm\"", body);
         Assert.Contains("\"mode\":\"dry-run-only\"", body);
+        Assert.Contains("\"allowedCreatureNames\":[\"Dodo\",\"Wolf\"]", body);
+        Assert.Contains("\"environmentVariables\":[\"WINDROSE_MAX_TELEPORTERS_PER_ISLAND\",\"WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER\"]", body);
+        Assert.Contains("\"maxTeleportersPerIsland\":3", body);
+        Assert.Contains("\"requestedStackSizeMultiplier\":1", body);
+        Assert.Contains("\"allowedStackSizeMultipliers\":[1,2,3]", body);
+        Assert.Contains("\"stackSizeEnforcement\":\"disabled-upstream-no-live-write\"", body);
+        Assert.Contains("contract-only-until-native-hooks-are-proven", body);
+        Assert.Contains("legacy stack_size writes stay disabled", body);
+    }
+
+    [Fact]
+    public async Task PluginSmokeOptionsEndpointAdvertisesSafePlayerTargetModes()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokeGetAsync(app, "/api/plugin/smoke-options");
+
+        Assert.Contains("\"readOnly\":true", body);
+        Assert.Contains("\"modeId\":\"offline-mock-player\"", body);
+        Assert.Contains("\"modeId\":\"dev-server-no-player\"", body);
+        Assert.Contains("\"modeId\":\"random-online-dev-player-read-only\"", body);
+        Assert.Contains("\"modeId\":\"operator-non-main-character\"", body);
+        Assert.Contains("\"modeId\":\"consenting-dev-player\"", body);
+        Assert.Contains("\"modeId\":\"sidecar-plugin-down-failure\"", body);
+        Assert.Contains("random player testing is read-only only", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("non-main / throwaway", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("blockIfMutationRequested", body);
+        Assert.Contains("approvalRequired", body);
+        Assert.DoesNotContain("main character is okay", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -159,7 +190,7 @@ public sealed class WindroseEndpointsTests
         await File.WriteAllTextAsync(
             Path.Combine(tempRoot, "windrose_plugin_bridge", "status.json"),
             """
-            {"pluginId":"windrose-sidecar-bridge","status":"started","startedAt":"2026-06-04T00:00:00Z","sidecarUrl":"http://127.0.0.1:8781","mode":"dry-run-only","message":"test heartbeat"}
+            {"pluginId":"windrose-sidecar-bridge","status":"started","startedAt":"2026-06-04T00:00:00Z","sidecarUrl":"http://127.0.0.1:8781","mode":"dry-run-only","limits":{"maxTeleportersPerIsland":4,"requestedStackSizeMultiplier":2,"stackSizeEnforcement":"disabled-upstream-no-live-write"},"message":"test heartbeat"}
             """);
 
         try
@@ -171,6 +202,9 @@ public sealed class WindroseEndpointsTests
             Assert.Contains("\"connected\":true", body);
             Assert.Contains("\"status\":\"started\"", body);
             Assert.Contains("\"mode\":\"dry-run-only\"", body);
+            Assert.Contains("\"maxTeleportersPerIsland\":4", body);
+            Assert.Contains("\"requestedStackSizeMultiplier\":2", body);
+            Assert.Contains("\"stackSizeEnforcement\":\"disabled-upstream-no-live-write\"", body);
             Assert.Contains("test heartbeat", body);
         }
         finally
@@ -204,6 +238,96 @@ public sealed class WindroseEndpointsTests
     }
 
     [Fact]
+    public async Task PluginDryRunEndpointAllowsWolfSummonByCreatureName()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokePostJsonAsync(app, "/api/plugin/actions/dry-run", """
+        {
+          "actionId": "windrose.spawn.dodo_swarm",
+          "targetPlayer": "Test Player",
+          "count": 2,
+          "radiusMeters": 10,
+          "offsetMeters": 4,
+          "creatureName": "wolf"
+        }
+        """);
+
+        Assert.Contains("\"accepted\":true", body);
+        Assert.Contains("\"creatureId\":\"R5.Creature.Wolf\"", body);
+        Assert.Contains("\"creatureName\":\"Wolf\"", body);
+        Assert.Contains("creatureId=R5.Creature.Wolf creatureName=Wolf", body);
+    }
+
+    [Fact]
+    public async Task PluginDryRunEndpointAcceptsNestedRandomSummonObject()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokePostJsonAsync(app, "/api/plugin/actions/dry-run", """
+        {
+          "actionId": "windrose.spawn.dodo_swarm",
+          "targetPlayer": "Test Player",
+          "summon": {
+            "selection": "random",
+            "creaturePool": ["Dodo", "Wolf"],
+            "count": 3,
+            "radiusMeters": 12,
+            "offsetMeters": 5
+          }
+        }
+        """);
+
+        Assert.Contains("\"accepted\":true", body);
+        Assert.Contains("\"count\":3", body);
+        Assert.Contains("\"radiusMeters\":12", body);
+        Assert.Contains("\"offsetMeters\":5", body);
+        Assert.Contains("\"selectionMode\":\"random\"", body);
+        Assert.Contains("\"randomCreaturePool\":[\"Dodo\",\"Wolf\"]", body);
+        Assert.Contains("selectionMode=random", body);
+    }
+
+    [Fact]
+    public async Task PluginDryRunEndpointRejectsRandomSummonWithUnsupportedPool()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokePostJsonAsync(app, "/api/plugin/actions/dry-run", """
+        {
+          "actionId": "windrose.spawn.dodo_swarm",
+          "targetPlayer": "Test Player",
+          "summon": {
+            "selection": "random",
+            "creaturePool": ["Bear"]
+          }
+        }
+        """);
+
+        Assert.Contains("\"accepted\":false", body);
+        Assert.Contains("summon.creaturePool must contain at least one allowed creature", body);
+    }
+
+    [Fact]
+    public async Task PluginDryRunEndpointRejectsUnsupportedSummonCreature()
+    {
+        await using var app = CreateApp();
+        await app.StartAsync();
+        var body = await InvokePostJsonAsync(app, "/api/plugin/actions/dry-run", """
+        {
+          "actionId": "windrose.spawn.dodo_swarm",
+          "targetPlayer": "Test Player",
+          "count": 2,
+          "radiusMeters": 10,
+          "offsetMeters": 4,
+          "creatureName": "bear"
+        }
+        """);
+
+        Assert.Contains("\"accepted\":false", body);
+        Assert.Contains("creatureName must be Dodo or Wolf", body);
+    }
+
+    [Fact]
     public async Task PluginDryRunEndpointRejectsInvalidDodoSwarmRequest()
     {
         await using var app = CreateApp();
@@ -221,6 +345,113 @@ public sealed class WindroseEndpointsTests
         Assert.Contains("\"accepted\":false", body);
         Assert.Contains("targetPlayer is required", body);
         Assert.Contains("count must be between 1 and 50", body);
+    }
+
+    [Fact]
+    public async Task PluginExecuteEndpointRejectsWhenDevExecutionGateIsDisabled()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"windrose-plugin-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            await using var app = CreateApp(serverFilesPath: tempRoot, pluginBridgeDevExecutionEnabled: false);
+            await app.StartAsync();
+            var body = await InvokePostJsonAsync(app, "/api/plugin/actions/execute", """
+            {
+              "actionId": "windrose.spawn.dodo_swarm",
+              "targetPlayer": "Dev Throwaway",
+              "count": 1,
+              "approvalId": "operator-approved-dev-smoke",
+              "modeId": "operator-non-main-character"
+            }
+            """);
+
+            Assert.Contains("\"accepted\":false", body);
+            Assert.Contains("\"executed\":false", body);
+            Assert.Contains("dev execution gate is disabled", body, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(tempRoot, "windrose_plugin_bridge", "actions")));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PluginExecuteEndpointQueuesApprovedDevActionFile()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"windrose-plugin-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            await using var app = CreateApp(serverFilesPath: tempRoot, pluginBridgeDevExecutionEnabled: true);
+            await app.StartAsync();
+            var body = await InvokePostJsonAsync(app, "/api/plugin/actions/execute", """
+            {
+              "actionId": "windrose.spawn.dodo_swarm",
+              "targetPlayer": "Dev Throwaway",
+              "count": 1,
+              "radiusMeters": 6,
+              "offsetMeters": 2,
+              "creatureName": "Dodo",
+              "approvalId": "operator-approved-dev-smoke",
+              "modeId": "operator-non-main-character"
+            }
+            """);
+
+            Assert.Contains("\"accepted\":true", body);
+            Assert.Contains("\"queued\":true", body);
+            Assert.Contains("\"dryRun\":false", body);
+            Assert.Contains("\"executed\":false", body);
+            Assert.Contains("\"approvalId\":\"operator-approved-dev-smoke\"", body);
+            Assert.Contains("\"modeId\":\"operator-non-main-character\"", body);
+
+            var actionsPath = Path.Combine(tempRoot, "windrose_plugin_bridge", "actions");
+            var actionPath = Assert.Single(Directory.GetFiles(actionsPath, "*.json"));
+            var actionFile = await File.ReadAllTextAsync(actionPath);
+            Assert.Contains("\"pluginId\": \"windrose-sidecar-bridge\"", actionFile);
+            Assert.Contains("\"dryRun\": false", actionFile);
+            Assert.Contains("\"approved\": true", actionFile);
+            Assert.Contains("\"targetPlayer\": \"Dev Throwaway\"", actionFile);
+            Assert.Contains("\"creatureName\": \"Dodo\"", actionFile);
+            Assert.Contains("\"approvalId\": \"operator-approved-dev-smoke\"", actionFile);
+
+            var pendingIndex = await File.ReadAllTextAsync(Path.Combine(actionsPath, "pending.txt"));
+            Assert.Contains(Path.GetFileNameWithoutExtension(actionPath), pendingIndex);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PluginActionResultEndpointReadsPluginWriteback()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"windrose-plugin-test-{Guid.NewGuid():N}");
+        var resultsPath = Path.Combine(tempRoot, "windrose_plugin_bridge", "results");
+        Directory.CreateDirectory(resultsPath);
+        await File.WriteAllTextAsync(Path.Combine(resultsPath, "action-123.json"), """
+        {"pluginId":"windrose-sidecar-bridge","actionRequestId":"action-123","status":"executed","executed":true,"outcome":"dev-execution-writeback","targetPlayer":"Dev Throwaway"}
+        """);
+
+        try
+        {
+            await using var app = CreateApp(serverFilesPath: tempRoot, pluginBridgeDevExecutionEnabled: true);
+            await app.StartAsync();
+            var body = await InvokeGetWithRouteValueAsync(app, "/api/plugin/actions/{actionRequestId}/result", "/api/plugin/actions/action-123/result", "actionRequestId", "action-123");
+
+            Assert.Contains("\"actionRequestId\":\"action-123\"", body);
+            Assert.Contains("\"status\":\"executed\"", body);
+            Assert.Contains("\"executed\":true", body);
+            Assert.Contains("Dev Throwaway", body);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
     }
 
     [Fact]
@@ -475,6 +706,44 @@ public sealed class WindroseEndpointsTests
     }
 
     [Fact]
+    public async Task ChannelCheevosStateEndpointReturnsSecretSafeReadback()
+    {
+        await using var app = CreateApp(channelCheevosReadback: new ChannelCheevosPollReadback
+        {
+            Enabled = true,
+            Configured = true,
+            Target = "dev",
+            Endpoint = "https://channel-cheevos.example/api/windrose/state",
+            Status = "ok",
+            Message = "ChannelCheevos state poll succeeded.",
+            ObservedAtUtc = DateTimeOffset.Parse("2026-06-05T00:00:00Z"),
+            State = new ChannelCheevosStateSnapshot
+            {
+                ChannelName = "dbcdevs",
+                GeneratedAtUtc = DateTimeOffset.Parse("2026-06-05T00:00:00Z"),
+                IsInitialized = true,
+                ConnectedFeatures = ["windrose"],
+                Stream = new ChannelCheevosStreamSnapshot
+                {
+                    StreamId = "stream-1",
+                    Title = "Windrose smoke",
+                    SubscriberCount = 2,
+                    ChatterCount = 3
+                }
+            },
+            RawError = "secret webkey must stay internal"
+        });
+        await app.StartAsync();
+        var body = await InvokeGetAsync(app, "/api/channel-cheevos/state");
+
+        Assert.Contains("\"status\":\"ok\"", body);
+        Assert.Contains("\"channelName\":\"dbcdevs\"", body);
+        Assert.Contains("Windrose smoke", body);
+        Assert.DoesNotContain("secret webkey", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("RawError", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task EventsStreamEndpointWritesServerSentEvents()
     {
         var channel = Channel.CreateUnbounded<WindroseEvent>();
@@ -501,20 +770,23 @@ public sealed class WindroseEndpointsTests
         Assert.Contains("Test Player", body);
     }
 
-    private static WebApplication CreateApp(ChannelReader<WindroseEvent>? events = null, bool redactSensitiveMetadata = false, string? serverFilesPath = null)
+    private static WebApplication CreateApp(ChannelReader<WindroseEvent>? events = null, bool redactSensitiveMetadata = false, string? serverFilesPath = null, ChannelCheevosPollReadback? channelCheevosReadback = null, bool pluginBridgeDevExecutionEnabled = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSignalR();
         builder.Services.AddSingleton<IOptions<WindroseStateOptions>>(_ => Microsoft.Extensions.Options.Options.Create(new WindroseStateOptions
         {
             RedactSensitiveMetadata = redactSensitiveMetadata,
-            ServerFilesPath = serverFilesPath ?? "/server-files"
+            ServerFilesPath = serverFilesPath ?? "/server-files",
+            PluginBridgeDevExecutionEnabled = pluginBridgeDevExecutionEnabled
         }));
         builder.Services.AddSingleton<IWindroseStateStore>(_ => new StubStateStore(events));
+        builder.Services.AddSingleton<IChannelCheevosStatePoller>(_ => new StubChannelCheevosStatePoller(channelCheevosReadback));
         var app = builder.Build();
         app.MapWindroseStateHub();
         app.MapWindroseStateEndpoints();
         app.MapWindrosePluginBridgeEndpoints();
+        app.MapChannelCheevosStateEndpoints();
         return app;
     }
 
@@ -550,10 +822,39 @@ public sealed class WindroseEndpointsTests
         return await reader.ReadToEndAsync();
     }
 
+    private static async Task<string> InvokeGetWithRouteValueAsync(WebApplication app, string routePattern, string path, string routeKey, string routeValue)
+    {
+        var endpoint = FindEndpoint(app.Services, routePattern);
+        var context = new DefaultHttpContext { RequestServices = app.Services };
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = path;
+        context.Request.RouteValues[routeKey] = routeValue;
+        context.Response.Body = new MemoryStream();
+
+        await endpoint.RequestDelegate!(context);
+
+        context.Response.Body.Position = 0;
+        using var reader = new StreamReader(context.Response.Body, Encoding.UTF8);
+        return await reader.ReadToEndAsync();
+    }
+
     private static RouteEndpoint FindEndpoint(IServiceProvider services, string route)
     {
         var dataSource = services.GetRequiredService<EndpointDataSource>();
         return Assert.Single(dataSource.Endpoints.OfType<RouteEndpoint>(), endpoint => string.Equals(endpoint.RoutePattern.RawText, route, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class StubChannelCheevosStatePoller(ChannelCheevosPollReadback? readback) : IChannelCheevosStatePoller
+    {
+        public Task<ChannelCheevosPollReadback> PollAsync(CancellationToken cancellationToken = default) => Task.FromResult(readback ?? new ChannelCheevosPollReadback
+        {
+            Enabled = false,
+            Configured = false,
+            Target = "prod",
+            Status = "disabled",
+            Message = "ChannelCheevos polling is disabled.",
+            ObservedAtUtc = DateTimeOffset.Parse("2026-06-05T00:00:00Z")
+        });
     }
 
     private sealed class StubStateStore(ChannelReader<WindroseEvent>? events = null) : IWindroseStateStore

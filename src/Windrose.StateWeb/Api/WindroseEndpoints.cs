@@ -79,6 +79,24 @@ public static class WindroseEndpoints
                 readOnly = true
             });
         });
+        endpoints.MapGet("/api/saves/latest/record-graph", (IWindroseStateStore store) =>
+        {
+            var save = store.GetState().Save;
+            return Results.Ok(new
+            {
+                readOnly = save.RecordGraph.ReadOnly,
+                save.RecordGraph.SourcePath,
+                save.RecordGraph.HasCrossLinkedIdentityAndPortableData,
+                save.RecordGraph.CanExportWithoutRekey,
+                save.RecordGraph.Verdict,
+                save.RecordGraph.RecordTypes,
+                save.RecordGraph.IdentityMarkers,
+                save.RecordGraph.CandidatePortableMarkers,
+                save.RecordGraph.ReferenceMarkers,
+                save.RecordGraph.CoLocatedEvidence,
+                save.RecordGraph.Entries
+            });
+        });
         endpoints.MapGet("/api/saves/latest/observed-families", (IWindroseStateStore store) =>
         {
             var save = store.GetState().Save;
@@ -409,8 +427,8 @@ public static class WindroseEndpoints
             new RuntimeActionHookContract(
                 "HandleDodoSwarm",
                 "targetPlayer",
-                ["targetPlayer", "count", "radiusMeters", "offsetMeters", "creatureId", "creatureName"],
-                "Dry run should log the resolved target, count, radius/offset, creature id/name, and whether the hook was skipped or rejected.",
+                ["targetPlayer", "count", "radiusMeters", "offsetMeters", "creatureId", "creatureName", "summon"],
+                "Dry run should log the resolved target, count, radius/offset, summon selection mode, creature id/name, and whether the hook was skipped or rejected.",
                 ["unknown target player", "invalid count or spawn radius", "hook unavailable", "unsafe live server state", "live execution without approval"])),
         new(
             "windrose.cosmetic.confetti",

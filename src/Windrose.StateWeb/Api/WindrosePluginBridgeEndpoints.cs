@@ -8,12 +8,24 @@ public static class WindrosePluginBridgeEndpoints
 {
     private const string PluginId = "windrose-sidecar-bridge";
     private const string PluginDisplayName = "Windrose Sidecar Bridge";
+    private const int DefaultMaxTeleportersPerIsland = 3;
+    private const int DefaultRequestedStackSizeMultiplier = 1;
+    private const string StackSizeEnforcement = "disabled-upstream-no-live-write";
+    private static readonly CreatureDefinition[] AllowedSummonCreatures =
+    [
+        new("R5.Creature.Dodo", "Dodo"),
+        new("R5.Creature.Wolf", "Wolf")
+    ];
 
     public static IEndpointRouteBuilder MapWindrosePluginBridgeEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/plugin/manifest", (IOptions<WindroseStateOptions> options) =>
         {
             var bridge = BuildBridgePaths(options.Value);
+            var effectiveLimits = ReadPluginConfigLimits(options.Value) ?? new WindrosePluginLimits(
+                DefaultMaxTeleportersPerIsland,
+                DefaultRequestedStackSizeMultiplier,
+                StackSizeEnforcement);
             return Results.Ok(new
             {
                 pluginId = PluginId,
@@ -24,7 +36,32 @@ public static class WindrosePluginBridgeEndpoints
                 {
                     manifest = "/api/plugin/manifest",
                     status = "/api/plugin/status",
-                    dryRun = "/api/plugin/actions/dry-run"
+                    smokeOptions = "/api/plugin/smoke-options",
+                    dryRun = "/api/plugin/actions/dry-run",
+                    execute = "/api/plugin/actions/execute",
+                    result = "/api/plugin/actions/{actionRequestId}/result"
+                },
+                config = new
+                {
+                    file = "server-files/windrose_plugin_bridge/config.json",
+                    environmentVariables = new[]
+                    {
+                        "WINDROSE_MAX_TELEPORTERS_PER_ISLAND",
+                        "WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER"
+                    },
+                    limits = new
+                    {
+                        maxTeleportersPerIsland = effectiveLimits.MaxTeleportersPerIsland ?? DefaultMaxTeleportersPerIsland,
+                        requestedStackSizeMultiplier = effectiveLimits.RequestedStackSizeMultiplier ?? DefaultRequestedStackSizeMultiplier,
+                        allowedStackSizeMultipliers = new[] { 1, 2, 3 },
+                        stackSizeEnforcement = effectiveLimits.StackSizeEnforcement ?? StackSizeEnforcement
+                    },
+                    enforcement = "contract-only-until-native-hooks-are-proven",
+                    notes = new[]
+                    {
+                        "Teleporter cap is config/heartbeat only until a native island placement/counting hook is proven.",
+                        "Stack size multiplier is request/contract only; legacy stack_size writes stay disabled because upstream inventory mutation can corrupt save state."
+                    }
                 },
                 bridge,
                 actions = new[]
@@ -42,7 +79,18 @@ public static class WindrosePluginBridgeEndpoints
                             "radiusMeters",
                             "offsetMeters",
                             "creatureId",
-                            "creatureName"
+                            "creatureName",
+                            "summon"
+                        },
+                        allowedCreatureNames = AllowedSummonCreatures.Select(creature => creature.Name).ToArray(),
+                        allowedCreatureIds = AllowedSummonCreatures.Select(creature => creature.Id).ToArray(),
+                        summonContract = new
+                        {
+                            objectField = "summon",
+                            selectionModes = new[] { "explicit", "random" },
+                            fields = new[] { "creatureId", "creatureName", "creature", "selection", "creaturePool", "count", "radiusMeters", "offsetMeters" },
+                            randomSentinel = "random",
+                            defaultCreaturePool = AllowedSummonCreatures.Select(creature => creature.Name).ToArray()
                         },
                         failureModes = new[]
                         {
@@ -52,6 +100,86 @@ public static class WindrosePluginBridgeEndpoints
                             "unsafe live server state",
                             "live execution without approval"
                         }
+                    }
+                }
+            });
+        });
+
+        endpoints.MapGet("/api/plugin/smoke-options", () =>
+        {
+            return Results.Ok(new
+            {
+                pluginId = PluginId,
+                readOnly = true,
+                matrix = "docs/roadmaps/windrose-runtime-control-surface/safe-smoke-harness-matrix.md",
+                globalRules = new[]
+                {
+                    "Dev server only for any smoke that touches a live Windrose runtime or player state.",
+                    "Player-bound smokes default to a non-main / throwaway character.",
+                    "Random player testing is read-only only unless explicit consent exists.",
+                    "Mutating smokes require approval, exact target identity, log capture, and a rollback or revert plan."
+                },
+                modes = new[]
+                {
+                    new
+                    {
+                        modeId = "offline-mock-player",
+                        allowedTarget = "Local fixture, disposable harness, or mocked player object.",
+                        risk = "low",
+                        readOnly = true,
+                        approvalRequired = false,
+                        blockIfMutationRequested = true,
+                        evidence = new[] { "harness output", "fixture snapshot", "pass/fail result" }
+                    },
+                    new
+                    {
+                        modeId = "dev-server-no-player",
+                        allowedTarget = "Dev server with no connected players.",
+                        risk = "low",
+                        readOnly = true,
+                        approvalRequired = false,
+                        blockIfMutationRequested = true,
+                        evidence = new[] { "server/bridge status", "manifest or health response", "logs showing read-only path" }
+                    },
+                    new
+                    {
+                        modeId = "random-online-dev-player-read-only",
+                        allowedTarget = "Any connected dev player, read-only probes only.",
+                        risk = "low",
+                        readOnly = true,
+                        approvalRequired = false,
+                        blockIfMutationRequested = true,
+                        evidence = new[] { "probe output", "status response", "confirmation that no writes occurred" }
+                    },
+                    new
+                    {
+                        modeId = "operator-non-main-character",
+                        allowedTarget = "Dev server, clearly named non-main / throwaway character.",
+                        risk = "medium",
+                        readOnly = false,
+                        approvalRequired = true,
+                        blockIfMutationRequested = false,
+                        evidence = new[] { "pre/post state", "command log", "rollback record", "timestamps" }
+                    },
+                    new
+                    {
+                        modeId = "consenting-dev-player",
+                        allowedTarget = "Dev server, explicitly consenting player account.",
+                        risk = "medium-high",
+                        readOnly = false,
+                        approvalRequired = true,
+                        blockIfMutationRequested = false,
+                        evidence = new[] { "consent record", "pre/post state", "logs", "timestamps" }
+                    },
+                    new
+                    {
+                        modeId = "sidecar-plugin-down-failure",
+                        allowedTarget = "Dev stack or local harness with plugin or sidecar intentionally disabled.",
+                        risk = "low",
+                        readOnly = true,
+                        approvalRequired = false,
+                        blockIfMutationRequested = true,
+                        evidence = new[] { "graceful failure message", "degraded-mode behavior", "no fallback write path" }
                     }
                 }
             });
@@ -88,6 +216,7 @@ public static class WindrosePluginBridgeEndpoints
                     status?.StartedAt,
                     status?.SidecarUrl,
                     status?.Mode,
+                    status?.Limits,
                     status?.Message
                 });
             }
@@ -103,37 +232,15 @@ public static class WindrosePluginBridgeEndpoints
 
         endpoints.MapPost("/api/plugin/actions/dry-run", async (HttpRequest httpRequest, CancellationToken cancellationToken) =>
         {
-            WindrosePluginActionDryRunRequest? request;
-            try
+            var parsed = await ReadActionRequestAsync(httpRequest, dryRun: true, cancellationToken);
+            if (parsed.Error is not null)
             {
-                request = await JsonSerializer.DeserializeAsync<WindrosePluginActionDryRunRequest>(
-                    httpRequest.Body,
-                    new JsonSerializerOptions(JsonSerializerDefaults.Web),
-                    cancellationToken);
-            }
-            catch (JsonException ex)
-            {
-                return Results.BadRequest(new
-                {
-                    pluginId = PluginId,
-                    accepted = false,
-                    dryRun = true,
-                    errors = new[] { $"Request body is not valid JSON: {ex.Message}" }
-                });
+                return parsed.Error;
             }
 
-            if (request is null)
-            {
-                return Results.BadRequest(new
-                {
-                    pluginId = PluginId,
-                    accepted = false,
-                    dryRun = true,
-                    errors = new[] { "Request body is required." }
-                });
-            }
-
-            var validationErrors = Validate(request);
+            var request = parsed.Request!;
+            var summon = NormalizeSummon(request);
+            var validationErrors = Validate(request, summon);
             if (validationErrors.Count > 0)
             {
                 return Results.BadRequest(new
@@ -145,31 +252,219 @@ public static class WindrosePluginBridgeEndpoints
                 });
             }
 
-            var creatureName = string.IsNullOrWhiteSpace(request.CreatureName) ? "Dodo" : request.CreatureName.Trim();
-            var creatureId = string.IsNullOrWhiteSpace(request.CreatureId) ? "R5.Creature.Dodo" : request.CreatureId.Trim();
-            var logLine = $"[windrose-sidecar-bridge] dry-run HandleDodoSwarm target={request.TargetPlayer!.Trim()} count={request.Count} radiusMeters={request.RadiusMeters:0.##} offsetMeters={request.OffsetMeters:0.##} creatureId={creatureId} creatureName={creatureName} result=not-executed approvalRequired=true";
+            var creature = ResolveCreature(summon);
+            var logLine = $"[windrose-sidecar-bridge] dry-run HandleDodoSwarm target={request.TargetPlayer!.Trim()} count={summon.Count} radiusMeters={summon.RadiusMeters:0.##} offsetMeters={summon.OffsetMeters:0.##} selectionMode={summon.SelectionMode} creatureId={creature.Id} creatureName={creature.Name} result=not-executed approvalRequired=true";
 
-            return Results.Ok(new
+            return Results.Ok(BuildValidatedActionResponse(request, summon, creature, dryRun: true, queued: false, actionRequestId: null, outcome: "validated-dry-run-only", logLine));
+        });
+
+        endpoints.MapPost("/api/plugin/actions/execute", async (HttpRequest httpRequest, IOptions<WindroseStateOptions> options, CancellationToken cancellationToken) =>
+        {
+            var parsed = await ReadActionRequestAsync(httpRequest, dryRun: false, cancellationToken);
+            if (parsed.Error is not null)
             {
-                pluginId = PluginId,
-                accepted = true,
-                dryRun = true,
-                executed = false,
-                actionId = request.ActionId,
-                handler = "HandleDodoSwarm",
-                targetPlayer = request.TargetPlayer.Trim(),
-                request.Count,
-                request.RadiusMeters,
-                request.OffsetMeters,
-                creatureId,
-                creatureName,
-                outcome = "validated-dry-run-only",
-                logLine
-            });
+                return parsed.Error;
+            }
+
+            var request = parsed.Request!;
+            var summon = NormalizeSummon(request);
+            var validationErrors = Validate(request, summon);
+            if (!options.Value.PluginBridgeDevExecutionEnabled)
+            {
+                validationErrors.Add("Dev execution gate is disabled. Set WindroseState__PluginBridgeDevExecutionEnabled=true only on the approved windrose2-dev test bed.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.ApprovalId))
+            {
+                validationErrors.Add("approvalId is required for dev execution.");
+            }
+
+            if (!string.Equals(request.ModeId, "operator-non-main-character", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(request.ModeId, "consenting-dev-player", StringComparison.OrdinalIgnoreCase))
+            {
+                validationErrors.Add("modeId must be operator-non-main-character or consenting-dev-player for dev execution.");
+            }
+
+            if (validationErrors.Count > 0)
+            {
+                return Results.BadRequest(new
+                {
+                    pluginId = PluginId,
+                    accepted = false,
+                    dryRun = false,
+                    queued = false,
+                    executed = false,
+                    errors = validationErrors
+                });
+            }
+
+            Directory.CreateDirectory(options.Value.PluginBridgeActionsPath);
+            Directory.CreateDirectory(options.Value.PluginBridgeResultsPath);
+            var creature = ResolveCreature(summon);
+            var actionRequestId = $"wr-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
+            var actionPath = Path.Combine(options.Value.PluginBridgeActionsPath, $"{actionRequestId}.json");
+            var actionPayload = BuildQueuedActionPayload(request, summon, creature, actionRequestId);
+            await File.WriteAllTextAsync(actionPath, JsonSerializer.Serialize(actionPayload, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }), cancellationToken);
+            await File.AppendAllTextAsync(Path.Combine(options.Value.PluginBridgeActionsPath, "pending.txt"), actionRequestId + Environment.NewLine, cancellationToken);
+
+            var logLine = $"[windrose-sidecar-bridge] queued HandleDodoSwarm actionRequestId={actionRequestId} target={request.TargetPlayer!.Trim()} count={summon.Count} radiusMeters={summon.RadiusMeters:0.##} offsetMeters={summon.OffsetMeters:0.##} selectionMode={summon.SelectionMode} creatureId={creature.Id} creatureName={creature.Name} approvalId={request.ApprovalId!.Trim()} modeId={request.ModeId!.Trim()}";
+            return Results.Accepted($"/api/plugin/actions/{actionRequestId}/result", BuildValidatedActionResponse(request, summon, creature, dryRun: false, queued: true, actionRequestId, outcome: "queued-for-dev-plugin-execution", logLine));
+        });
+
+        endpoints.MapGet("/api/plugin/actions/{actionRequestId}/result", async (string actionRequestId, IOptions<WindroseStateOptions> options, CancellationToken cancellationToken) =>
+        {
+            if (!IsSafeActionRequestId(actionRequestId))
+            {
+                return Results.BadRequest(new
+                {
+                    pluginId = PluginId,
+                    accepted = false,
+                    error = "actionRequestId contains unsupported characters."
+                });
+            }
+
+            var resultPath = Path.Combine(options.Value.PluginBridgeResultsPath, $"{actionRequestId}.json");
+            if (!File.Exists(resultPath))
+            {
+                return Results.Ok(new
+                {
+                    pluginId = PluginId,
+                    actionRequestId,
+                    status = "pending",
+                    executed = false,
+                    resultPath
+                });
+            }
+
+            try
+            {
+                await using var stream = File.OpenRead(resultPath);
+                var result = await JsonSerializer.DeserializeAsync<JsonElement>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web), cancellationToken);
+                return Results.Ok(result);
+            }
+            catch (JsonException ex)
+            {
+                return Results.Problem($"Plugin result writeback is not valid JSON: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            catch (IOException ex)
+            {
+                return Results.Problem($"Plugin result writeback could not be read: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
         });
 
         return endpoints;
     }
+
+    private static async Task<ActionRequestParseResult> ReadActionRequestAsync(HttpRequest httpRequest, bool dryRun, CancellationToken cancellationToken)
+    {
+        WindrosePluginActionDryRunRequest? request;
+        try
+        {
+            request = await JsonSerializer.DeserializeAsync<WindrosePluginActionDryRunRequest>(
+                httpRequest.Body,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web),
+                cancellationToken);
+        }
+        catch (JsonException ex)
+        {
+            return new ActionRequestParseResult(null, Results.BadRequest(new
+            {
+                pluginId = PluginId,
+                accepted = false,
+                dryRun,
+                errors = new[] { $"Request body is not valid JSON: {ex.Message}" }
+            }));
+        }
+
+        if (request is null)
+        {
+            return new ActionRequestParseResult(null, Results.BadRequest(new
+            {
+                pluginId = PluginId,
+                accepted = false,
+                dryRun,
+                errors = new[] { "Request body is required." }
+            }));
+        }
+
+        return new ActionRequestParseResult(request, null);
+    }
+
+    private static object BuildValidatedActionResponse(
+        WindrosePluginActionDryRunRequest request,
+        NormalizedSummonRequest summon,
+        CreatureDefinition creature,
+        bool dryRun,
+        bool queued,
+        string? actionRequestId,
+        string outcome,
+        string logLine) => new
+    {
+        pluginId = PluginId,
+        accepted = true,
+        dryRun,
+        queued,
+        executed = false,
+        actionRequestId,
+        actionId = request.ActionId,
+        handler = "HandleDodoSwarm",
+        targetPlayer = request.TargetPlayer!.Trim(),
+        summon.Count,
+        summon.RadiusMeters,
+        summon.OffsetMeters,
+        approvalId = request.ApprovalId?.Trim(),
+        modeId = request.ModeId?.Trim(),
+        summon = new
+        {
+            selectionMode = summon.SelectionMode,
+            creatureId = creature.Id,
+            creatureName = creature.Name,
+            requestedCreature = summon.RequestedCreature,
+            randomCreaturePool = summon.CreaturePool.Select(creature => creature.Name).ToArray()
+        },
+        creatureId = creature.Id,
+        creatureName = creature.Name,
+        selectionMode = summon.SelectionMode,
+        outcome,
+        logLine
+    };
+
+    private static object BuildQueuedActionPayload(
+        WindrosePluginActionDryRunRequest request,
+        NormalizedSummonRequest summon,
+        CreatureDefinition creature,
+        string actionRequestId) => new
+    {
+        pluginId = PluginId,
+        actionRequestId,
+        actionId = request.ActionId.Trim(),
+        handler = "HandleDodoSwarm",
+        dryRun = false,
+        approved = true,
+        approvalId = request.ApprovalId!.Trim(),
+        modeId = request.ModeId!.Trim(),
+        requestedAt = DateTimeOffset.UtcNow,
+        targetPlayer = request.TargetPlayer!.Trim(),
+        count = summon.Count,
+        radiusMeters = summon.RadiusMeters,
+        offsetMeters = summon.OffsetMeters,
+        selectionMode = summon.SelectionMode,
+        creatureId = creature.Id,
+        creatureName = creature.Name,
+        safety = new
+        {
+            approvedDevServer = "windrose2-dev",
+            playerTargeting = "non-main/throwaway or consenting dev player only",
+            productionAllowed = false
+        }
+    };
+
+    private static bool IsSafeActionRequestId(string value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length <= 96 &&
+        value.All(character => char.IsLetterOrDigit(character) || character is '-' or '_');
+
+    private sealed record ActionRequestParseResult(WindrosePluginActionDryRunRequest? Request, IResult? Error);
 
     private static object BuildBridgePaths(WindroseStateOptions options) => new
     {
@@ -180,7 +475,31 @@ public static class WindrosePluginBridgeEndpoints
         configPath = options.PluginBridgeConfigPath
     };
 
-    private static List<string> Validate(WindrosePluginActionDryRunRequest request)
+    private static WindrosePluginLimits? ReadPluginConfigLimits(WindroseStateOptions options)
+    {
+        if (!File.Exists(options.PluginBridgeConfigPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(options.PluginBridgeConfigPath);
+            return JsonSerializer.Deserialize<WindrosePluginConfig>(
+                stream,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))?.Limits;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private static List<string> Validate(WindrosePluginActionDryRunRequest request, NormalizedSummonRequest summon)
     {
         var errors = new List<string>();
         if (!string.Equals(request.ActionId, "windrose.spawn.dodo_swarm", StringComparison.OrdinalIgnoreCase))
@@ -193,23 +512,116 @@ public static class WindrosePluginBridgeEndpoints
             errors.Add("targetPlayer is required.");
         }
 
-        if (request.Count is < 1 or > 50)
+        if (summon.Count is < 1 or > 50)
         {
             errors.Add("count must be between 1 and 50.");
         }
 
-        if (request.RadiusMeters is < 1 or > 100)
+        if (summon.RadiusMeters is < 1 or > 100)
         {
             errors.Add("radiusMeters must be between 1 and 100.");
         }
 
-        if (request.OffsetMeters is < 0 or > 100)
+        if (summon.OffsetMeters is < 0 or > 100)
         {
             errors.Add("offsetMeters must be between 0 and 100.");
         }
 
+        if (summon.InvalidCreatureId is not null)
+        {
+            errors.Add("creatureId must be R5.Creature.Dodo or R5.Creature.Wolf, or use the random sentinel through summon.selection.");
+        }
+
+        if (summon.InvalidCreatureName is not null)
+        {
+            errors.Add("creatureName must be Dodo or Wolf, or use random through summon.selection/creature.");
+        }
+
+        if (summon.CreatureMismatch)
+        {
+            errors.Add("creatureId and creatureName must refer to the same allowed creature.");
+        }
+
+        if (summon.SelectionMode == "random" && summon.CreaturePool.Count == 0)
+        {
+            errors.Add("summon.creaturePool must contain at least one allowed creature when random selection is requested.");
+        }
+
         return errors;
     }
+
+    private static NormalizedSummonRequest NormalizeSummon(WindrosePluginActionDryRunRequest request)
+    {
+        var summon = request.Summon;
+        var requestedCreature = FirstNonBlank(summon?.Creature, summon?.CreatureName, summon?.CreatureId, request.CreatureName, request.CreatureId);
+        var selectionMode = FirstNonBlank(summon?.Selection);
+        var wantsRandom = IsRandom(selectionMode) || IsRandom(requestedCreature);
+        var explicitCreatureName = IsRandom(summon?.CreatureName) ? null : FirstNonBlank(summon?.CreatureName, summon?.Creature, request.CreatureName);
+        var explicitCreatureId = IsRandom(summon?.CreatureId) ? null : FirstNonBlank(summon?.CreatureId, request.CreatureId);
+
+        var pool = NormalizeCreaturePool(summon?.CreaturePool, wantsRandom);
+        var idCreature = string.IsNullOrWhiteSpace(explicitCreatureId) ? null : FindCreatureById(explicitCreatureId.Trim());
+        var nameCreature = string.IsNullOrWhiteSpace(explicitCreatureName) ? null : FindCreatureByName(explicitCreatureName.Trim());
+
+        return new NormalizedSummonRequest(
+            summon?.Count ?? request.Count,
+            summon?.RadiusMeters ?? request.RadiusMeters,
+            summon?.OffsetMeters ?? request.OffsetMeters,
+            wantsRandom ? "random" : "explicit",
+            requestedCreature,
+            pool,
+            idCreature,
+            nameCreature,
+            !string.IsNullOrWhiteSpace(explicitCreatureId) && idCreature is null ? explicitCreatureId : null,
+            !string.IsNullOrWhiteSpace(explicitCreatureName) && nameCreature is null ? explicitCreatureName : null,
+            idCreature is not null && nameCreature is not null && !string.Equals(idCreature.Id, nameCreature.Id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static CreatureDefinition ResolveCreature(NormalizedSummonRequest summon)
+    {
+        if (summon.SelectionMode == "random")
+        {
+            return summon.CreaturePool.Count == 0
+                ? AllowedSummonCreatures[0]
+                : summon.CreaturePool[Random.Shared.Next(summon.CreaturePool.Count)];
+        }
+
+        return summon.NameCreature ?? summon.IdCreature ?? AllowedSummonCreatures[0];
+    }
+
+    private static IReadOnlyList<CreatureDefinition> NormalizeCreaturePool(string[]? requestedPool, bool wantsRandom)
+    {
+        if (!wantsRandom)
+        {
+            return Array.Empty<CreatureDefinition>();
+        }
+
+        if (requestedPool is null || requestedPool.Length == 0)
+        {
+            return AllowedSummonCreatures;
+        }
+
+        return requestedPool
+            .Select(value => FindCreatureByName(value.Trim()) ?? FindCreatureById(value.Trim()))
+            .Where(creature => creature is not null)
+            .Select(creature => creature!)
+            .DistinctBy(creature => creature.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? FirstNonBlank(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static bool IsRandom(string? value) =>
+        string.Equals(value?.Trim(), "random", StringComparison.OrdinalIgnoreCase);
+
+    private static CreatureDefinition? FindCreatureByName(string creatureName) =>
+        AllowedSummonCreatures.FirstOrDefault(creature => string.Equals(creature.Name, creatureName, StringComparison.OrdinalIgnoreCase));
+
+    private static CreatureDefinition? FindCreatureById(string creatureId) =>
+        AllowedSummonCreatures.FirstOrDefault(creature => string.Equals(creature.Id, creatureId, StringComparison.OrdinalIgnoreCase));
+
+    private sealed record CreatureDefinition(string Id, string Name);
 
     private sealed record WindrosePluginStatus(
         string? PluginId,
@@ -217,7 +629,15 @@ public static class WindrosePluginBridgeEndpoints
         DateTimeOffset? StartedAt,
         string? SidecarUrl,
         string? Mode,
+        WindrosePluginLimits? Limits,
         string? Message);
+
+    private sealed record WindrosePluginConfig(WindrosePluginLimits? Limits);
+
+    private sealed record WindrosePluginLimits(
+        int? MaxTeleportersPerIsland,
+        int? RequestedStackSizeMultiplier,
+        string? StackSizeEnforcement);
 
     private sealed record WindrosePluginActionDryRunRequest(
         string ActionId,
@@ -225,6 +645,32 @@ public static class WindrosePluginBridgeEndpoints
         int Count = 8,
         double RadiusMeters = 8,
         double OffsetMeters = 2,
-        string? CreatureId = "R5.Creature.Dodo",
-        string? CreatureName = "Dodo");
+        string? CreatureId = null,
+        string? CreatureName = null,
+        SummonObject? Summon = null,
+        string? ApprovalId = null,
+        string? ModeId = null);
+
+    private sealed record SummonObject(
+        string? CreatureId = null,
+        string? CreatureName = null,
+        string? Creature = null,
+        string? Selection = null,
+        string[]? CreaturePool = null,
+        int? Count = null,
+        double? RadiusMeters = null,
+        double? OffsetMeters = null);
+
+    private sealed record NormalizedSummonRequest(
+        int Count,
+        double RadiusMeters,
+        double OffsetMeters,
+        string SelectionMode,
+        string? RequestedCreature,
+        IReadOnlyList<CreatureDefinition> CreaturePool,
+        CreatureDefinition? IdCreature,
+        CreatureDefinition? NameCreature,
+        string? InvalidCreatureId,
+        string? InvalidCreatureName,
+        bool CreatureMismatch);
 }

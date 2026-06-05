@@ -2,7 +2,9 @@
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.SignalR.Client
 @using Windrose.StateWeb.Hubs
+@using Windrose.StateWeb.Services
 @inject IWindroseStateStore Store
+@inject IChannelCheevosStatePoller ChannelCheevosPoller
 @inject Microsoft.Extensions.Options.IOptions<Windrose.StateWeb.Options.WindroseStateOptions> Options
 @inject NavigationManager NavigationManager
 @inject ILogger<Home> Logger
@@ -39,6 +41,9 @@
                 </MudChip>
                 <MudChip T="string" Color="@HubStatusColor" Variant="Variant.Outlined">
                     Live @_hubStatus
+                </MudChip>
+                <MudChip T="string" Color="@ChannelCheevosPollColor" Variant="Variant.Outlined">
+                    CC poll @ChannelCheevosPollLabel()
                 </MudChip>
             </div>
         </MudStack>
@@ -91,10 +96,10 @@
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
             <MudPaper Class="pa-4 summary-card" Elevation="0">
-                <MudText Typo="Typo.overline">History</MudText>
-                <MudText Typo="Typo.h6" Class="summary-value">@_state.RecentHistory.Count</MudText>
-                <MudText Typo="Typo.body2" Class="summary-caption">recent timeline entries</MudText>
-                <MudText Typo="Typo.caption" Class="summary-caption">lightweight operator history</MudText>
+                <MudText Typo="Typo.overline">ChannelCheevos Poll</MudText>
+                <MudText Typo="Typo.h6" Class="summary-value">@ChannelCheevosPollLabel()</MudText>
+                <MudText Typo="Typo.body2" Class="summary-caption text-wrap">@ChannelCheevosPollSummary()</MudText>
+                <MudText Typo="Typo.caption" Class="summary-caption">@ChannelCheevosStreamSummary()</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -192,12 +197,18 @@
     private bool _disposed;
     private bool _connectedToHub;
     private CancellationTokenSource? _lifetimeCts;
+    private ChannelCheevosPollReadback _channelCheevosReadback = new()
+    {
+        Status = "not-polled",
+        Message = "ChannelCheevos state has not been polled yet."
+    };
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _state = Store.GetState();
         _lastUpdate = DateTimeOffset.Now;
         _lifetimeCts = new CancellationTokenSource();
+        await RefreshChannelCheevosReadbackAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -320,6 +331,56 @@
         return $"{save.WorldSettingCount} total ({save.WorldBoolSettingCount ?? 0} bool, {save.WorldFloatSettingCount ?? 0} float, {save.WorldTagSettingCount ?? 0} tag)";
     }
 
+    private async Task RefreshChannelCheevosReadbackAsync()
+    {
+        try
+        {
+            _channelCheevosReadback = await ChannelCheevosPoller.PollAsync(_lifetimeCts?.Token ?? CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _channelCheevosReadback = new ChannelCheevosPollReadback
+            {
+                Enabled = Options.Value.EnableChannelCheevosPolling,
+                Configured = !string.IsNullOrWhiteSpace(Options.Value.ResolveChannelCheevosStateUrl()) && !string.IsNullOrWhiteSpace(Options.Value.ResolveChannelCheevosWebKey()),
+                Target = Options.Value.ResolvedChannelCheevosTarget,
+                Endpoint = Options.Value.ResolveChannelCheevosStateUrl() ?? string.Empty,
+                Status = "error",
+                Message = "ChannelCheevos state poll failed.",
+                ObservedAtUtc = DateTimeOffset.UtcNow,
+                RawError = ex.Message
+            };
+        }
+    }
+
+    private string ChannelCheevosPollLabel() => _channelCheevosReadback.Status switch
+    {
+        "ok" => "OK",
+        "disabled" => "Disabled",
+        "unconfigured" => "Unconfigured",
+        "rejected" => "Rejected",
+        "error" => "Error",
+        _ => _channelCheevosReadback.Status
+    };
+
+    private string ChannelCheevosPollSummary()
+    {
+        if (_channelCheevosReadback.State is null)
+        {
+            return _channelCheevosReadback.Message;
+        }
+
+        return $"{_channelCheevosReadback.State.ChannelName}: {_channelCheevosReadback.State.ConnectedFeatures.Count} connected features";
+    }
+
+    private string ChannelCheevosStreamSummary()
+    {
+        var stream = _channelCheevosReadback.State?.Stream;
+        return stream is null
+            ? $"{_channelCheevosReadback.Target} / {_channelCheevosReadback.ObservedAtUtc.ToLocalTime():HH:mm:ss}"
+            : $"{stream.Title} ({stream.ChatterCount} chatters, {stream.SubscriberCount} subs)";
+    }
+
     private static string FormatAge(TimeSpan? age)
     {
         if (age is null) return "-";
@@ -353,6 +414,16 @@
         "connecting" => Color.Warning,
         "reconnecting" => Color.Warning,
         "disconnected" => Color.Error,
+        _ => Color.Default
+    };
+
+    private Color ChannelCheevosPollColor => _channelCheevosReadback.Status switch
+    {
+        "ok" => Color.Success,
+        "disabled" => Color.Default,
+        "unconfigured" => Color.Warning,
+        "rejected" => Color.Warning,
+        "error" => Color.Error,
         _ => Color.Default
     };
 

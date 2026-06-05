@@ -25,6 +25,7 @@ Status labels used on this page:
 - [Windrose Runtime Control Surface Map](../../features/server-state-observability/runtime-control-surface.md)
 - [Windrose Runtime Control Surface Roadmap](README.md)
 - [Execution Path](execution-path.md)
+- [Safe Smoke Harness Matrix](safe-smoke-harness-matrix.md)
 - [Operator Contract](operator-contract.md)
 - [Questions / Open Decisions](questions.md)
 - [Phases](phases.md)
@@ -41,6 +42,9 @@ Status labels used on this page:
 | Teleport / speed adjustments | confirmed | WindrosePlus / RCON | usually yes | yes | operator convenience and rescue workflows |
 | Map generation / export | confirmed | WindrosePlus / RCON | usually yes | yes | useful for state snapshots and event prep |
 | Custom command registry | confirmed | WindrosePlus / mod hooks | yes for live use | yes | the bridge for future operator actions |
+| Summon totem object placement | native-hook-only / dry-run-only | future native object registry + plugin manifest | yes | yes | object ids must be sourced from the registry or manifest; no hardcoded repo allow-list exists yet |
+| Max teleporters per island policy | confirmed config contract | Windrose sidecar bridge config/status | no for config; yes for future enforcement | yes | `WINDROSE_MAX_TELEPORTERS_PER_ISLAND` writes `limits.maxTeleportersPerIsland`; live placement enforcement still needs a native hook |
+| Requested stack-size multiplier policy | confirmed config contract | Windrose sidecar bridge config/status | no for readback; yes for future enforcement | yes | `WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER` writes `limits.requestedStackSizeMultiplier`; live stack-size enforcement remains `disabled-upstream-no-live-write` until a safe inventory hook exists |
 | External broadcast / server message | deferred | WindrosePlus or native hook | yes | yes | not first-class in the current Lua-only surface |
 | Spawn enemies / entities | native-hook-only | native hook / future mod | yes | yes | not proven as a stable API today |
 | Generic world mutation | speculative | native hook | yes | yes | keep constrained and separate from observer surfaces |
@@ -70,6 +74,23 @@ These are the write-capable actions already documented in the WindrosePlus/RCON 
 - custom command registration
 - command execution through the approved mod/RCON path
 - diagnostics and counters that help operators understand world state
+
+### Confirmed config-only policies
+
+- `WINDROSE_MAX_TELEPORTERS_PER_ISLAND` is a repo-owned bridge policy value with default `3`. The install script writes it to `server-files/windrose_plugin_bridge/config.json` as `limits.maxTeleportersPerIsland`, the Lua plugin echoes it in `status.json`, and State Web exposes it through the plugin manifest/status endpoints.
+- `WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER` is a repo-owned requested stack policy value with default `1` and accepted values `1`, `2`, or `3`. The install script writes it as `limits.requestedStackSizeMultiplier`, the Lua plugin echoes it in `status.json`, and State Web exposes `limits.stackSizeEnforcement = "disabled-upstream-no-live-write"` so consumers know the policy is readback-only.
+- These are not live enforcement yet. Treat teleporter placement enforcement as native-hook-only until the plugin can identify the current island, count existing teleporters, and reject/queue placements through the approval/audit path. Treat stack-size enforcement as native/upstream-hook-only until inventory mutation is proven safe; do not write legacy `stack_size` / `inventory_size` keys into live player state.
+
+### Native-hook inventory
+
+| Candidate | Current surface | Classification | Notes |
+|---|---|---|---|
+| Creature spawn (`HandleDodoSwarm`) | WindrosePlus Lua placeholder + State Web dry-run endpoint | dry-run | Logs the request and blocks execution until a real native hook exists. |
+| Summon totem object placement | none proven | unsafe/unknown | Object ids must come from the native registry or plugin manifest; no documented live hook in the current repo, so keep it out of the observer layer. |
+| Teleporter counting / placement guard | policy config + manifest/status readback | unsafe/unknown as a live hook; read-only policy today | The config is observable, but the actual counting/reject/queue hook is not proven yet. |
+| Inventory stack enforcement | policy config + manifest/status readback | unsafe/unknown | Readback is allowed; live writes remain blocked because upstream inventory mutation is unsafe/no-op. |
+
+Recommended first native proof: teleporter-counting / placement-guard hook. It is the smallest safe proof because it can begin as a read-only island lookup plus teleporter count and only later grow into reject/queue behavior for over-cap placements.
 
 ## Deferred capabilities
 
@@ -131,7 +152,8 @@ These are the ideas most worth exploring after the capability map is stable.
    - Classic “surprise event” idea.
    - Treat as native-hook-only until proven otherwise.
 
-   - The typed dodo-swarm seam is now documented as `HandleDodoSwarm` with `targetPlayer`, `count`, `radiusMeters`, `offsetMeters`, `creatureId`, and `creatureName` fields; it remains unsupported until a real native hook exists.
+   - The typed dodo/wolf summon seam is now documented as `HandleDodoSwarm` with legacy `targetPlayer`, `count`, `radiusMeters`, `offsetMeters`, `creatureId`, and `creatureName` fields plus an optional nested `summon` object for richer requests. The dry-run contract only accepts Dodo (`R5.Creature.Dodo`) or Wolf (`R5.Creature.Wolf`), supports `summon.selection = "random"` over an allow-listed pool, and remains unsupported until a real native hook exists.
+   - The summon-totem object contract is documented separately: object ids are not hardcoded in repo docs and must come from the native object registry mirrored into the plugin manifest; until that registry exists, the endpoint should only validate and reject live placement.
 
 9. **Chat or server-message injection**
    - Fun for immersion and crowd interaction.

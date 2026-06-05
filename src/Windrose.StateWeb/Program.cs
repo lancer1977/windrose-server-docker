@@ -22,6 +22,7 @@ builder.Services.AddSingleton<IWindroseLivePushPublisher, SignalRWindroseLivePus
 builder.Services.AddHostedService<WindroseLivePushService>();
 builder.Services.AddSingleton<IWindroseStateHubPublisher, SignalRWindroseStateHubPublisher>();
 builder.Services.AddHostedService<WindroseStateHubBroadcastService>();
+builder.Services.AddHttpClient<IChannelCheevosStatePoller, ChannelCheevosStatePoller>();
 
 builder.Logging.AddConsole();
 if (!string.IsNullOrWhiteSpace(seqOptions["ServerUrl"]) &&
@@ -50,6 +51,7 @@ app.UseAntiforgery();
 app.MapWindroseStateHub();
 app.MapWindroseStateEndpoints();
 app.MapWindrosePluginBridgeEndpoints();
+app.MapChannelCheevosStateEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

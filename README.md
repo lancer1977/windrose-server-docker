@@ -148,6 +148,8 @@ The image ships with the latest Windrose+ version. To use a different version, s
 
 Edit `server-files/windrose_plus.json` (multipliers, feature flags) or any `server-files/windrose_plus*.ini` (advanced stat overrides), then restart the container — the config takes effect on the next boot. Restarts without config changes cost no extra startup time.
 
+Do not use the legacy `stack_size` / `inventory_size` multiplier keys for bigger stacks or slots. Upstream Windrose+ currently keeps those inventory-affecting settings disabled/no-op because they can be written into player save state and crash Windrose's inventory validator. Treat doubled/tripled stack size as a native-hook or upstream feature request, not a safe config-only change.
+
 RCON password, admin Steam IDs, and feature flags are re-read live from `windrose_plus.json` while the server is running — no restart required for those.
 
 ### Windrose+ environment variables
@@ -162,6 +164,8 @@ RCON password, admin Steam IDs, and feature flags are re-read live from `windros
 | `WINDROSE_STATE_WEB_URL` | `http://windrose-state-web:8781` | Sidecar URL written into the bridge plugin config and heartbeat context. |
 | `WINDROSE_PLUGIN_BRIDGE_PATH` | `/home/steam/server-files/windrose_plugin_bridge` | Shared path where the plugin writes `status.json` and reads future action/result files. |
 | `WINDROSE_SIDECAR_PLUGIN_MODE` | `dry-run-only` | Current bridge mode. Keep `dry-run-only` until a native Windrose spawn hook is proven and reviewed. |
+| `WINDROSE_MAX_TELEPORTERS_PER_ISLAND` | `3` | Repo-owned bridge policy value written to `server-files/windrose_plugin_bridge/config.json` and the plugin heartbeat. This is contract/config only until a native teleporter-placement hook is proven. |
+| `WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER` | `1` | Requested stack-size policy value (`1`, `2`, or `3`) written to the bridge config/heartbeat for operator/test readback. This does not write Windrose+'s legacy `stack_size` key while upstream inventory mutation remains unsafe/no-op. |
 | `WINDROSE_STATE_PLUGIN_BRIDGE_RELATIVE_PATH` | `windrose_plugin_bridge` | State Web relative path, under `/server-files`, used to read plugin heartbeat/config files. |
 
 ### Seq logging
@@ -207,6 +211,7 @@ GET /api/history/timeseries
 GET /api/saves/latest
 GET /api/saves/latest/checkpoint
 GET /api/saves/latest/observed-families
+GET /api/saves/latest/record-graph
 GET /api/server/description
 GET /api/world/description
 GET /api/world/entities
@@ -229,14 +234,15 @@ The `server-files` mount is read-only inside the sidecar. The first build is int
 
 ### Plugin / sidecar bridge
 
-The repo now includes a dry-run Windrose+ Lua plugin at `plugins/windrose-sidecar-bridge/`. When both `WINDROSE_PLUS_ENABLED=true` and `WINDROSE_SIDECAR_PLUGIN_ENABLED=true`, `scripts/install_windrose_plus.sh` copies it into `server-files/windrose_plus_mods/windrose-sidecar-bridge/`, creates `server-files/windrose_plugin_bridge/config.json`, and keeps the install idempotent on every restart.
+The repo now includes a dry-run Windrose+ Lua plugin at `plugins/windrose-sidecar-bridge/`. When both `WINDROSE_PLUS_ENABLED=true` and `WINDROSE_SIDECAR_PLUGIN_ENABLED=true`, `scripts/install_windrose_plus.sh` copies it into `server-files/windrose_plus_mods/windrose-sidecar-bridge/`, creates `server-files/windrose_plugin_bridge/config.json`, and keeps the install idempotent on every restart. The bridge config includes `limits.maxTeleportersPerIsland`, sourced from `WINDROSE_MAX_TELEPORTERS_PER_ISLAND`.
 
 The bridge proves the plugin-to-sidecar lifecycle without live mutation:
 
 1. Windrose+ loads the Lua plugin from the friendly mods folder.
 2. The plugin writes `server-files/windrose_plugin_bridge/status.json` with its mode and sidecar URL.
-3. State Web reads that heartbeat through its read-only `/server-files` mount.
-4. Operators can inspect:
+3. The heartbeat echoes contract-only policy values such as `limits.maxTeleportersPerIsland`, `limits.requestedStackSizeMultiplier`, and `limits.stackSizeEnforcement` so ChannelCheevos/tests can read the configured policy values.
+4. State Web reads that heartbeat through its read-only `/server-files` mount.
+5. Operators can inspect:
    - `GET /api/plugin/manifest` for the sidecar/plugin contract.
    - `GET /api/plugin/status` for the latest plugin heartbeat.
    - `POST /api/plugin/actions/dry-run` for request validation and dry-run dodo-swarm logging.
@@ -249,7 +255,19 @@ curl -sS http://localhost:8781/api/plugin/actions/dry-run \
   -d '{"actionId":"windrose.spawn.dodo_swarm","targetPlayer":"Test Player","count":8,"radiusMeters":12,"offsetMeters":2}'
 ```
 
+Nested summon objects are also accepted for richer caller contracts. Nested `summon.count`, `summon.radiusMeters`, and `summon.offsetMeters` override the legacy top-level values. Use `summon.selection=random` or `summon.creature=random` to pick from an allow-listed pool; the current safe pool is Dodo/Wolf only.
+
+```shell
+curl -sS http://localhost:8781/api/plugin/actions/dry-run \
+  -H 'content-type: application/json' \
+  -d '{"actionId":"windrose.spawn.dodo_swarm","targetPlayer":"Test Player","summon":{"selection":"random","creaturePool":["Dodo","Wolf"],"count":3,"radiusMeters":12,"offsetMeters":5}}'
+```
+
 A successful response returns `accepted: true`, `dryRun: true`, `executed: false`, and a log line containing `approvalRequired=true`. That is intentional: live dodo spawning remains blocked until a native Windrose spawn hook is proven, wired to ChannelCheevos approval/audit data, and reviewed.
+
+Teleporter policy: set `WINDROSE_MAX_TELEPORTERS_PER_ISLAND=3` (or another non-negative integer) on the Windrose server container to change the configured max teleporter count per island. Today that value is exposed through `server-files/windrose_plugin_bridge/config.json`, `GET /api/plugin/manifest`, and `GET /api/plugin/status`; it does not yet enforce live placement because that still needs a proven native teleporter hook.
+
+Stack-size policy: set `WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER=2` or `3` to expose the desired doubled/tripled stack-size policy through the same bridge config/status/read API. This remains readback only: the installer/plugin deliberately do not write legacy `stack_size` / `inventory_size` settings until a native/upstream-safe inventory hook exists.
 
 Troubleshooting:
 
@@ -258,6 +276,7 @@ Troubleshooting:
 - Dry-run requests return validation errors: check `actionId`, `targetPlayer`, `count` (`1..50`), `radiusMeters` (`1..100`), and `offsetMeters` (`0..100`).
 
 The save reader now summarizes the latest backup ZIP instead of just the backup file metadata. It exposes safe JSON document previews, collection counts, world preset details, and `ServerDescription.json` fields while still avoiding any write access into the save tree.
+The new `/api/saves/latest/record-graph` response is read-only and redacted by design: it highlights identity markers versus candidate portable markers for player/account/session/progression/inventory/spawn data, and it explicitly reports when those markers co-reside so operators can see why selective cloning is still blocked.
 
 ### Ports
 

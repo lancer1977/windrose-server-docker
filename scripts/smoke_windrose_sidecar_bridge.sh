@@ -22,6 +22,8 @@ WINDROSE_SIDECAR_PLUGIN_ENABLED=true \
 WINDROSE_STATE_WEB_URL="http://windrose-state-web:8781" \
 WINDROSE_PLUGIN_BRIDGE_PATH="$SERVER_FILES/windrose_plugin_bridge" \
 WINDROSE_SIDECAR_PLUGIN_MODE="dry-run-only" \
+WINDROSE_MAX_TELEPORTERS_PER_ISLAND="4" \
+WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER="2" \
 WINDROSE_SIDECAR_PLUGIN_SOURCE_DIR="$PLUGIN_SOURCE" \
 SERVER_FILES="$SERVER_FILES" \
 bash "$REPO_ROOT/scripts/install_windrose_plus.sh"
@@ -42,7 +44,7 @@ done
 jq -e \
     --arg sidecarUrl "http://windrose-state-web:8781" \
     --arg bridgePath "$SERVER_FILES/windrose_plugin_bridge" \
-    '.pluginId == "windrose-sidecar-bridge" and .sidecarUrl == $sidecarUrl and .bridgePath == $bridgePath and .mode == "dry-run-only" and .liveExecution == false' \
+    '.pluginId == "windrose-sidecar-bridge" and .sidecarUrl == $sidecarUrl and .bridgePath == $bridgePath and .mode == "dry-run-only" and .liveExecution == false and .limits.maxTeleportersPerIsland == 4 and .limits.requestedStackSizeMultiplier == 2 and .limits.stackSizeEnforcement == "disabled-upstream-no-live-write"' \
     "$CONFIG_PATH" >/dev/null
 
 echo "install proof: copied plugin into $TARGET_DIR"
@@ -67,10 +69,14 @@ LUA_LOG="$TMP_ROOT/lua-plugin.log"
 WINDROSE_PLUGIN_BRIDGE_PATH="$LUA_BRIDGE_ROOT" \
 WINDROSE_STATE_WEB_URL="http://windrose-state-web:8781" \
 WINDROSE_SIDECAR_PLUGIN_MODE="dry-run-only" \
+WINDROSE_MAX_TELEPORTERS_PER_ISLAND="4" \
+WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER="2" \
     "$LUA_BIN" "$TARGET_DIR/init.lua" > "$LUA_LOG" 2>&1
 
 grep -F "[windrose-sidecar-bridge] loaded in dry-run-only mode" "$LUA_LOG" >/dev/null
-jq -e '.pluginId == "windrose-sidecar-bridge" and .status == "started" and .mode == "dry-run-only"' \
+grep -F "policy maxTeleportersPerIsland=4 enforcement=contract-only" "$LUA_LOG" >/dev/null
+grep -F "policy requestedStackSizeMultiplier=2 enforcement=disabled-upstream-no-live-write" "$LUA_LOG" >/dev/null
+jq -e '.pluginId == "windrose-sidecar-bridge" and .status == "started" and .mode == "dry-run-only" and .limits.maxTeleportersPerIsland == 4 and .limits.requestedStackSizeMultiplier == 2 and .limits.stackSizeEnforcement == "disabled-upstream-no-live-write"' \
     "$LUA_BRIDGE_ROOT/status.json" >/dev/null
 
 echo "lua proof: $LUA_BIN executed plugin skeleton and wrote $LUA_BRIDGE_ROOT/status.json"

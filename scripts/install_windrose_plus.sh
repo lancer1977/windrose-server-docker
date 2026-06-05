@@ -12,6 +12,8 @@
 #   WINDROSE_STATE_WEB_URL           (default http://windrose-state-web:8781) — sidecar URL passed to plugin
 #   WINDROSE_PLUGIN_BRIDGE_PATH      (default $SERVER_FILES/windrose_plugin_bridge) — plugin heartbeat/action path
 #   WINDROSE_SIDECAR_PLUGIN_MODE     (default dry-run-only) — plugin execution posture
+#   WINDROSE_MAX_TELEPORTERS_PER_ISLAND (default 3) — policy value written to the bridge plugin config/status
+#   WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER (default 1) — desired stack multiplier contract; not applied live while upstream stack_size is disabled
 #   WINDROSE_SIDECAR_PLUGIN_SOURCE_DIR (default /home/steam/plugins/windrose-sidecar-bridge) — test/dev override
 #   SERVER_FILES                     (default /home/steam/server-files)
 #
@@ -27,7 +29,25 @@ set -euo pipefail
 : "${WINDROSE_STATE_WEB_URL:=http://windrose-state-web:8781}"
 : "${WINDROSE_PLUGIN_BRIDGE_PATH:=$SERVER_FILES/windrose_plugin_bridge}"
 : "${WINDROSE_SIDECAR_PLUGIN_MODE:=dry-run-only}"
+: "${WINDROSE_MAX_TELEPORTERS_PER_ISLAND:=3}"
+: "${WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER:=1}"
 : "${WINDROSE_SIDECAR_PLUGIN_SOURCE_DIR:=/home/steam/plugins/windrose-sidecar-bridge}"
+
+case "$WINDROSE_MAX_TELEPORTERS_PER_ISLAND" in
+    ''|*[!0-9]*)
+        echo "install_windrose_plus: WINDROSE_MAX_TELEPORTERS_PER_ISLAND must be a non-negative integer" >&2
+        exit 1
+        ;;
+esac
+
+case "$WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER" in
+    1|2|3)
+        ;;
+    *)
+        echo "install_windrose_plus: WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER must be 1, 2, or 3" >&2
+        exit 1
+        ;;
+esac
 
 install_sidecar_bridge_plugin() {
     [ "${WINDROSE_SIDECAR_PLUGIN_ENABLED}" = "true" ] || return 0
@@ -57,7 +77,9 @@ install_sidecar_bridge_plugin() {
         --arg sidecarUrl "$WINDROSE_STATE_WEB_URL" \
         --arg bridgePath "$WINDROSE_PLUGIN_BRIDGE_PATH" \
         --arg mode "$WINDROSE_SIDECAR_PLUGIN_MODE" \
-        '{pluginId:"windrose-sidecar-bridge",sidecarUrl:$sidecarUrl,bridgePath:$bridgePath,mode:$mode,liveExecution:false}' \
+        --argjson maxTeleportersPerIsland "$WINDROSE_MAX_TELEPORTERS_PER_ISLAND" \
+        --argjson requestedStackSizeMultiplier "$WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER" \
+        '{pluginId:"windrose-sidecar-bridge",sidecarUrl:$sidecarUrl,bridgePath:$bridgePath,mode:$mode,liveExecution:($mode == "dev-execute"),limits:{maxTeleportersPerIsland:$maxTeleportersPerIsland,requestedStackSizeMultiplier:$requestedStackSizeMultiplier,stackSizeEnforcement:"disabled-upstream-no-live-write"}}' \
         > "$WINDROSE_PLUGIN_BRIDGE_PATH/config.json"
 
     chown -R steam:steam "$target_dir" "$WINDROSE_PLUGIN_BRIDGE_PATH" "$registry" 2>/dev/null || true

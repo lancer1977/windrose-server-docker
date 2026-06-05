@@ -76,7 +76,8 @@ public sealed class SaveMetadataReader(
                 ServerDescription = serverDescription,
                 DocumentSummaries = backupSummary.DocumentSummaries,
                 CollectionSummaries = backupSummary.CollectionSummaries,
-                ObservedFamilies = BuildObservedFamilies(checkpointEntries)
+                ObservedFamilies = BuildObservedFamilies(checkpointEntries),
+                RecordGraph = CheckpointRecordGraphBuilder.Build(checkpointEntries, checkpointExtractedPath)
             };
         }
         catch (Exception ex)
@@ -88,6 +89,7 @@ public sealed class SaveMetadataReader(
                 ServerDescription = ReadServerDescription(),
                 CheckpointContainerFormat = "RocksDB block-based SST",
                 ObservedFamilies = [],
+                RecordGraph = new SaveRecordGraphReport { Verdict = $"error: {ex.Message}", ReadOnly = true },
                 Error = ex.Message
             };
         }
@@ -114,20 +116,56 @@ public sealed class SaveMetadataReader(
                 "R5BLActor_BuildingBlock",
                 "R5BLActor_MineralNode"),
             CreateFamily(
-                "player-in-world-metadata",
-                entries.Any(entry => entry.Markers.Contains("R5BLPlayerInWorld", StringComparer.OrdinalIgnoreCase) || entry.ReadableTokens.Contains("R5BLPlayerInWorld", StringComparer.OrdinalIgnoreCase))
-                    ? "metadata-only"
+                "player-account-graph",
+                HasAnyEntryWithMarkers(entries, ["R5BLPlayer", "R5BLPlayerInWorld", "R5BLAccount", "PlayerId", "AccountId", "BLPlayerSessionId"])
+                    ? (HasAnyEntryWithMarkers(entries, ["AccountId", "PlayerId", "BLPlayerSessionId"]) && HasAnyEntryWithMarkers(entries, ["Inventory", "Equipment", "Hotbar", "Stats", "Experience", "Progression"])
+                        ? "mixed"
+                        : "present")
                     : "not-observed",
+                "Player/account/session markers are visible in RocksDB payloads; this family stays read-only until the graph can be rekeyed safely.",
+                "R5BLPlayer",
+                "R5BLPlayerInWorld",
+                "R5BLAccount",
+                "PlayerId",
+                "AccountId",
+                "BLPlayerSessionId"),
+            CreateFamily(
+                "player-progressions",
+                HasAnyEntryWithMarkers(entries, ["Stats", "Experience", "Progression", "Level"]) ? "candidate-portable" : "not-observed",
+                "Stats/xp/progression markers are visible only as candidate portable fields, not as a proven copy-safe record boundary.",
+                "Stats",
+                "Experience",
+                "Progression",
+                "Level"),
+            CreateFamily(
+                "inventory-equipment-hotbar",
+                HasAnyEntryWithMarkers(entries, ["Inventory", "Equipment", "Hotbar"]) ? "candidate-portable" : "not-observed",
+                "Inventory/equipment/hotbar markers are visible only as candidate portable fields, not as a proven copy-safe record boundary.",
+                "Inventory",
+                "Equipment",
+                "Hotbar"),
+            CreateFamily(
+                "spawn-location",
+                HasAnyEntryWithMarkers(entries, ["SpawnType", "SpawnRecordId", "Location", "WorldLocation", "Rotation", "MapFog", "ScenarioSave"]) ? "reference-only" : "not-observed",
+                "Spawn and world-location references are visible in the checkpoint sample, but they remain world-bound references rather than portable identity.",
+                "SpawnType",
+                "SpawnRecordId",
+                "Location",
+                "WorldLocation",
+                "Rotation",
+                "MapFog",
+                "ScenarioSave"),
+            CreateFamily(
+                "ship-reference",
+                HasAnyEntryWithMarkers(entries, ["ShipId"]) ? "reference-only" : "not-observed",
+                "ShipId appears in live SST payloads, but no standalone R5BLShip document has been found in the current snapshot set.",
+                "ShipId"),
+            CreateFamily(
+                "player-in-world-metadata",
+                HasAnyEntryWithMarkers(entries, ["R5BLPlayerInWorld"]) ? "metadata-only" : "not-observed",
                 "Player-in-world family names are visible in RocksDB metadata, but no standalone player document has been decoded yet.",
                 "R5BLPlayerInWorld",
                 "R5BLPlayer"),
-            CreateFamily(
-                "ship-reference",
-                entries.Any(entry => entry.Markers.Contains("ShipId", StringComparer.OrdinalIgnoreCase) || entry.ReadableTokens.Contains("ShipId", StringComparer.OrdinalIgnoreCase))
-                    ? "reference-only"
-                    : "not-observed",
-                "ShipId appears in live SST payloads, but no standalone R5BLShip document has been found in the current snapshot set.",
-                "ShipId"),
             CreateFamily(
                 "ship-document",
                 "not-observed",
@@ -145,6 +183,11 @@ public sealed class SaveMetadataReader(
             Evidence = evidence
         };
 
+    private static bool HasAnyEntryWithMarkers(IReadOnlyList<CheckpointEntrySummary> entries, IReadOnlyList<string> markers)
+    {
+        return entries.Any(entry => markers.Any(marker => entry.Markers.Contains(marker, StringComparer.OrdinalIgnoreCase) || entry.ReadableTokens.Contains(marker, StringComparer.OrdinalIgnoreCase)));
+    }
+
     private static IReadOnlyList<CheckpointEntrySummary> AnalyzeCheckpointEntries(string extractRoot)
     {
         if (!Directory.Exists(extractRoot))
@@ -157,13 +200,27 @@ public sealed class SaveMetadataReader(
             {
                 var info = new FileInfo(path);
                 var relativePath = Path.GetRelativePath(extractRoot, path).Replace('\\', '/');
+                var markers = CollectCheckpointMarkers(path, info.Length);
+                var readableTokens = CollectCheckpointTokens(path, info.Length);
+                var recordTypes = CollectRecordTypes(markers, readableTokens);
+                var identityMarkers = CollectIdentityMarkers(markers, readableTokens);
+                var portableMarkers = CollectPortableMarkers(markers, readableTokens);
+                var referenceMarkers = CollectReferenceMarkers(markers, readableTokens);
+                var classification = ClassifyCheckpointEntry(recordTypes, identityMarkers, portableMarkers, referenceMarkers);
+
                 return new CheckpointEntrySummary
                 {
                     Path = relativePath,
                     SizeBytes = info.Length,
                     Kind = InferKind(relativePath),
-                    Markers = CollectCheckpointMarkers(path, info.Length),
-                    ReadableTokens = CollectCheckpointTokens(path, info.Length)
+                    Markers = markers,
+                    ReadableTokens = readableTokens,
+                    RecordTypes = recordTypes,
+                    IdentityMarkers = identityMarkers,
+                    CandidatePortableMarkers = portableMarkers,
+                    ReferenceMarkers = referenceMarkers,
+                    Classification = classification.Classification,
+                    Notes = classification.Notes
                 };
             })
             .OrderByDescending(entry => entry.SizeBytes)
@@ -238,13 +295,13 @@ public sealed class SaveMetadataReader(
             }
 
             var tokens = System.Text.RegularExpressions.Regex
-                .Matches(System.Text.Encoding.ASCII.GetString(buffer, 0, read), @"[A-Za-z0-9_./-]{4,}")
+                .Matches(System.Text.Encoding.ASCII.GetString(buffer, 0, read), @"[A-Za-z0-9_./-]{2,}")
                 .Select(match => match.Value)
                 .Where(token => token.Length <= 80)
                 .Where(token => token.Any(char.IsUpper) || token.Contains('_') || token.Contains('/') || token.Contains('.'))
                 .Where(token => !token.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(24)
+                .Take(32)
                 .ToArray();
 
             return tokens;
@@ -254,6 +311,77 @@ public sealed class SaveMetadataReader(
             return [];
         }
     }
+
+    private static IReadOnlyList<string> CollectRecordTypes(IReadOnlyList<string> markers, IReadOnlyList<string> readableTokens)
+    {
+        return PickTokens(markers.Concat(readableTokens), ["R5BLPlayer", "R5BLPlayerInWorld", "R5BLAccount", "R5BLShip", "R5BLActor_BuildingBlock", "R5BLActor_MineralNode", "R5BLIslandChest"]);
+    }
+
+    private static IReadOnlyList<string> CollectIdentityMarkers(IReadOnlyList<string> markers, IReadOnlyList<string> readableTokens)
+    {
+        return PickTokens(markers.Concat(readableTokens), ["AccountId", "PlayerId", "BLPlayerSessionId", "PersistentServerId", "WorldIslandId"]);
+    }
+
+    private static IReadOnlyList<string> CollectPortableMarkers(IReadOnlyList<string> markers, IReadOnlyList<string> readableTokens)
+    {
+        return PickTokens(markers.Concat(readableTokens), ["Stats", "Experience", "XP", "Progression", "Level", "Inventory", "Equipment", "Hotbar", "Quest"]);
+    }
+
+    private static IReadOnlyList<string> CollectReferenceMarkers(IReadOnlyList<string> markers, IReadOnlyList<string> readableTokens)
+    {
+        return PickTokens(markers.Concat(readableTokens), ["SpawnType", "SpawnRecordId", "Location", "WorldLocation", "Rotation", "MapFog", "ScenarioSave", "ShipId"]);
+    }
+
+    private static CheckpointEntryClassification ClassifyCheckpointEntry(
+        IReadOnlyList<string> recordTypes,
+        IReadOnlyList<string> identityMarkers,
+        IReadOnlyList<string> portableMarkers,
+        IReadOnlyList<string> referenceMarkers)
+    {
+        var hasIdentity = identityMarkers.Count > 0;
+        var hasPortable = portableMarkers.Count > 0;
+        var hasReference = referenceMarkers.Count > 0;
+        var hasRecordType = recordTypes.Count > 0;
+
+        if (hasIdentity && hasPortable)
+        {
+            return new CheckpointEntryClassification(
+                "mixed",
+                "identity and portable markers co-reside in the same SST entry; export/import would require explicit rekey rules");
+        }
+
+        if (hasIdentity)
+        {
+            return new CheckpointEntryClassification(
+                hasReference ? "identity-reference" : "identity",
+                hasRecordType ? "record types plus identity markers are visible in the same SST entry" : "identity markers are visible in the same SST entry");
+        }
+
+        if (hasPortable)
+        {
+            return new CheckpointEntryClassification(
+                hasReference ? "portable-reference" : "portable",
+                hasRecordType ? "record types plus candidate portable markers are visible in the same SST entry" : "candidate portable markers are visible in the same SST entry");
+        }
+
+        if (hasReference)
+        {
+            return new CheckpointEntryClassification("reference", "world or spawn reference markers are visible in the same SST entry");
+        }
+
+        return new CheckpointEntryClassification(hasRecordType ? "record-type-only" : "unclassified", hasRecordType ? "record type markers are visible without higher-level identity hints" : null);
+    }
+
+    private static IReadOnlyList<string> PickTokens(IEnumerable<string> source, IReadOnlyList<string> allowList)
+    {
+        return source
+            .Where(token => allowList.Any(allowed => string.Equals(token, allowed, StringComparison.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(token => token, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private sealed record CheckpointEntryClassification(string Classification, string? Notes);
 
     private static bool ContainsAsciiToken(ReadOnlySpan<byte> haystack, string token)
     {
@@ -574,13 +702,30 @@ public sealed class SaveMetadataReader(
     [
         "R5BLPlayerInWorld",
         "R5BLPlayer",
+        "R5BLAccount",
         "R5BLShip",
         "R5BLActor_BuildingBlock",
         "R5BLActor_MineralNode",
         "R5BLIslandChest",
-        "Location",
-        "Rotation",
+        "AccountId",
+        "PlayerId",
+        "BLPlayerSessionId",
+        "Stats",
+        "Experience",
+        "XP",
+        "Progression",
+        "Level",
         "Inventory",
+        "Equipment",
+        "Hotbar",
+        "SpawnType",
+        "SpawnRecordId",
+        "Location",
+        "WorldLocation",
+        "Rotation",
+        "MapFog",
+        "ScenarioSave",
+        "ShipId",
         "Quest"
     ];
 

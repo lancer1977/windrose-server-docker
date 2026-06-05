@@ -44,5 +44,42 @@ public sealed class WindroseStateOptionsTargetResolutionTests
         Assert.Equal("prod-key", options.ResolveChannelCheevosWebKey());
         Assert.Equal("prod", options.ResolvedChannelCheevosTarget);
     }
+
+    [Fact]
+    public void ResolvesChannelCheevosStateUrl_FromExplicitTargetUrl()
+    {
+        var options = new WindroseStateOptions
+        {
+            ChannelCheevosTarget = "dev",
+            ChannelCheevosStateUrl = "https://prod.example/api/windrose/state",
+            ChannelCheevosStateUrlDev = "https://dev.example/api/windrose/state"
+        };
+
+        Assert.Equal("https://dev.example/api/windrose/state", options.ResolveChannelCheevosStateUrl());
+    }
+
+    [Fact]
+    public void ResolvesChannelCheevosStateUrl_FromBaseUrlWithoutExposingWebKey()
+    {
+        var options = new WindroseStateOptions
+        {
+            ChannelCheevosBaseUrl = "https://channel-cheevos.example/",
+            ChannelCheevosWebKey = "secret-key"
+        };
+
+        Assert.Equal("https://channel-cheevos.example/api/windrose/state", options.ResolveChannelCheevosStateUrl());
+        Assert.DoesNotContain("secret-key", options.ResolveChannelCheevosStateUrl(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolvesChannelCheevosStateUrl_FromHubOriginWhenBaseUrlMissing()
+    {
+        var options = new WindroseStateOptions
+        {
+            ChannelCheevosHubUrl = "https://channel-cheevos.example/hubs/windrose"
+        };
+
+        Assert.Equal("https://channel-cheevos.example/api/windrose/state", options.ResolveChannelCheevosStateUrl());
+    }
 }
 

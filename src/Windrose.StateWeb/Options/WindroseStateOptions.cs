@@ -12,7 +12,16 @@ public sealed class WindroseStateOptions
     public int SaveMetadataPollSeconds { get; set; } = 30;
     public bool TailFromEnd { get; set; }
     public bool EnableChannelCheevosPush { get; set; }
+    public bool EnableChannelCheevosPolling { get; set; }
     public string ChannelCheevosTarget { get; set; } = "prod";
+    public string? ChannelCheevosBaseUrl { get; set; }
+    public string? ChannelCheevosBaseUrlDev { get; set; }
+    public string? ChannelCheevosBaseUrlDebug { get; set; }
+    public string? ChannelCheevosBaseUrlProd { get; set; }
+    public string? ChannelCheevosStateUrl { get; set; }
+    public string? ChannelCheevosStateUrlDev { get; set; }
+    public string? ChannelCheevosStateUrlDebug { get; set; }
+    public string? ChannelCheevosStateUrlProd { get; set; }
     public string? ChannelCheevosHubUrl { get; set; }
     public string? ChannelCheevosHubUrlDev { get; set; }
     public string? ChannelCheevosHubUrlDebug { get; set; }
@@ -25,6 +34,7 @@ public sealed class WindroseStateOptions
     public string ChannelCheevosEventMethod { get; set; } = "WindroseEvent";
     public bool RedactSensitiveMetadata { get; set; }
     public string PluginBridgeRelativePath { get; set; } = "windrose_plugin_bridge";
+    public bool PluginBridgeDevExecutionEnabled { get; set; }
 
     public string LogPath => Path.Combine(ServerFilesPath, LogRelativePath);
     public string SaveRootPath => Path.Combine(ServerFilesPath, SaveRootRelativePath);
@@ -47,6 +57,40 @@ public sealed class WindroseStateOptions
         };
     }
 
+    public string? ResolveChannelCheevosBaseUrl()
+    {
+        var target = NormalizeTarget(ChannelCheevosTarget);
+        var configured = target switch
+        {
+            "dev" => ChannelCheevosBaseUrlDev ?? ChannelCheevosBaseUrl,
+            "debug" => ChannelCheevosBaseUrlDebug ?? ChannelCheevosBaseUrl,
+            "prod" => ChannelCheevosBaseUrlProd ?? ChannelCheevosBaseUrl,
+            _ => ChannelCheevosBaseUrl
+        };
+
+        return string.IsNullOrWhiteSpace(configured) ? TryResolveOrigin(ResolveChannelCheevosHubUrl()) : configured.TrimEnd('/');
+    }
+
+    public string? ResolveChannelCheevosStateUrl()
+    {
+        var target = NormalizeTarget(ChannelCheevosTarget);
+        var configured = target switch
+        {
+            "dev" => ChannelCheevosStateUrlDev ?? ChannelCheevosStateUrl,
+            "debug" => ChannelCheevosStateUrlDebug ?? ChannelCheevosStateUrl,
+            "prod" => ChannelCheevosStateUrlProd ?? ChannelCheevosStateUrl,
+            _ => ChannelCheevosStateUrl
+        };
+
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        var baseUrl = ResolveChannelCheevosBaseUrl();
+        return string.IsNullOrWhiteSpace(baseUrl) ? null : $"{baseUrl}/api/windrose/state";
+    }
+
     public string ResolveChannelCheevosWebKey()
     {
         var target = NormalizeTarget(ChannelCheevosTarget);
@@ -66,5 +110,15 @@ public sealed class WindroseStateOptions
         return string.IsNullOrWhiteSpace(target)
             ? "prod"
             : target.Trim().ToLowerInvariant();
+    }
+
+    private static string? TryResolveOrigin(string? absoluteUrl)
+    {
+        if (!Uri.TryCreate(absoluteUrl, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        return uri.GetLeftPart(UriPartial.Authority);
     }
 }

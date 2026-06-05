@@ -35,6 +35,21 @@ Still not proven as first-class APIs:
 
 If a capability only exists through a native hook or future upstream release, keep it in the deferred bucket instead of treating it as stable.
 
+### Hook inventory: current proof candidates and classifications
+
+The current repo surfaces split into four useful buckets:
+
+| Surface / candidate hook | Classification | Evidence in repo | Why it matters |
+|---|---|---|---|
+| `GET /api/plugin/manifest`, `GET /api/plugin/status`, and the bridge heartbeat | read-only | State Web reads the plugin heartbeat and manifests the current policy values | Safe observer/readback surface; no live mutation |
+| `HandleDodoSwarm` in `plugins/windrose-sidecar-bridge/init.lua` plus `/api/plugin/actions/execute` | dev-only queue/readback | State Web writes approved action files under `windrose_plugin_bridge/actions/`; WindrosePlus consumes them and writes `results/{actionRequestId}.json` on `windrose2-dev`; result reports `nativeSpawn=false` | This proves command delivery and plugin-side writeback, but not native in-game spawning |
+| Teleporter placement / island cap enforcement | mutation-capable target, but currently unsafe/unknown | `WINDROSE_MAX_TELEPORTERS_PER_ISLAND` is only echoed through config/status today; docs say live placement still needs a native hook | Best candidate for a future live guard because it can start as read-only counting and only later reject/queue placements |
+| Summon totem object placement and inventory stack enforcement | unsafe/unknown | No concrete live hook is proven; object ids must come from the native object registry or manifest, and stack-size docs explicitly avoid writing `stack_size` / `inventory_size` because upstream inventory validation can break | Keep these deferred until a safe native/upstream surface is demonstrated |
+
+Recommended first native proof: teleporter-counting / placement-guard hook.
+
+Rationale: it is the smallest safe proof that still moves toward a live action. A read-only island lookup plus teleporter count check can be verified without changing game state, and the same seam can later grow into reject/queue logic for over-cap placements.
+
 ### Next: shared contract package boundary
 
 Goal: expose the data shapes and pure transforms that the server app and downstream consumers share through `Windrose.StateWeb.Core`.
@@ -56,7 +71,15 @@ ChannelCheevos should consume those payloads and helpers from NuGet and normaliz
 
 ### Native-hook seam: dodo swarm around a selected player
 
-Goal: prove the minimal write-capable bridge for `windrose.spawn.dodo_swarm` without pretending the live mutation path exists yet.
+Goal: prove the minimal write-capable bridge for `windrose.spawn.dodo_swarm` without pretending native actor spawning exists yet.
+
+Implemented V3 boundary:
+
+- `POST /api/plugin/actions/execute` is gated by `WindroseState__PluginBridgeDevExecutionEnabled=true` and requires `approvalId` plus `modeId` of `operator-non-main-character` or `consenting-dev-player`.
+- Accepted requests are written as JSON action files in `windrose_plugin_bridge/actions/` and indexed in `pending.txt`.
+- The WindrosePlus plugin consumes pending actions in `dev-execute` mode and writes `windrose_plugin_bridge/results/{actionRequestId}.json`.
+- `GET /api/plugin/actions/{actionRequestId}/result` returns pending status until writeback exists, then returns the plugin result.
+- Current result proof is `status=executed`, `executed=true`, `outcome=dev-executed-plugin-writeback-no-native-spawn`, and `nativeSpawn=false`; do not describe this as live creature spawning.
 
 The local contract shape is the typed spawn request mirrored in ChannelCheevos:
 
@@ -65,10 +88,49 @@ The local contract shape is the typed spawn request mirrored in ChannelCheevos:
 - spawn count: `count`
 - spawn radius: `radiusMeters`
 - spawn offset: `offsetMeters`
-- creature id: `creatureId`
-- creature name: `creatureName`
-- dry-run / logging output: log the resolved target, count, radius/offset, creature id/name, and whether the hook was skipped or rejected
+- creature id: `creatureId`; currently allow-listed to `R5.Creature.Dodo` or `R5.Creature.Wolf`
+- creature name: `creatureName`; currently allow-listed to `Dodo` or `Wolf`
+- summon object: optional `summon` wrapper with `creatureId`, `creatureName`, `creature`, `selection`, `creaturePool`, `count`, `radiusMeters`, and `offsetMeters`; nested values override legacy top-level count/radius/offset fields
+- random summon selection: `summon.selection = "random"` or `summon.creature = "random"` selects one allowed creature from `summon.creaturePool` or the default Dodo/Wolf pool
+- dry-run / logging output: log the resolved target, count, radius/offset, summon selection mode, creature id/name, and whether the hook was skipped or rejected
 - failure modes: unknown target player, invalid count or spawn radius, hook unavailable, unsafe live server state, or live execution without approval
+
+### Native-hook seam: summon totem object dry-run contract
+
+Goal: prove the minimal dry-run bridge for placing a summon totem object without pretending the live placement path exists yet.
+
+The local contract shape is the typed placement request mirrored in the future native hook and the plugin manifest:
+
+- seam / handler name: `HandleSummonTotemObject`
+- action id: `windrose.place.summon_totem_object`
+- target selector: `targetPlayer`
+- object id: `objectId`; this must be sourced from the native object registry exposed by the hook or the plugin manifest, not hardcoded in repo docs
+- object name: `objectName`; optional human-friendly alias
+- summon object: optional `totem` wrapper with `objectId`, `objectName`, `selection`, `objectPool`, `count`, `radiusMeters`, `offsetMeters`, `snapToGround`, and `placementMode`; nested values override legacy top-level placement fields
+- object allow-list source of truth: `GET /api/plugin/manifest` should mirror the native registry as `allowedObjectIds`; until that registry exists, the dry-run endpoint must reject live placement and only report validation results
+- random summon selection: `totem.selection = "random"` or `totem.object = "random"` selects one allowed object from `totem.objectPool`
+- dry-run / logging output: log the resolved target, object id/name, placement mode, count, radius/offset, and whether the hook was skipped or rejected
+- failure modes: unknown target player, missing objectId, objectId not present in the allow-list, invalid count or placement radius, hook unavailable, unsafe live server state, or live execution without approval
+
+### Bridge config policy: max teleporters per island and requested stack size
+
+Goal: expose desired server policy values as server/plugin config now, without pretending live placement or inventory enforcement exists yet.
+
+Current contract:
+
+- env/config key: `WINDROSE_MAX_TELEPORTERS_PER_ISLAND`
+- default: `3`
+- generated bridge file: `server-files/windrose_plugin_bridge/config.json`
+- JSON shape: `limits.maxTeleportersPerIsland`
+- status echo: plugin heartbeat writes the same value under `limits.maxTeleportersPerIsland`
+- env/config key: `WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER`
+- default: `1`
+- accepted values: `1`, `2`, or `3`
+- JSON shape: `limits.requestedStackSizeMultiplier`
+- enforcement marker: `limits.stackSizeEnforcement = "disabled-upstream-no-live-write"`
+- State Web visibility: `GET /api/plugin/manifest` advertises the env keys/defaults, and `GET /api/plugin/status` returns heartbeat values when the plugin has started
+
+These are contract/config-only until native hooks are proven. Future teleporter enforcement should reject or queue teleporter placement requests that would exceed the current island's configured cap, then record that decision in the approval/audit path. Future stack-size enforcement needs a native/upstream-safe inventory hook; do not write legacy `stack_size` / `inventory_size` keys into live player state.
 
 This seam is native-hook-only until the real server-side bridge exists. The State Web capability report now surfaces it as an unsupported action so downstream action-contract consumers can wire against the exact shape without guessing.
 
@@ -91,11 +153,15 @@ This matrix makes the backlog sweep explicit for the next coder. It ties each na
 | Story | Current status | Proof / next command |
 |---|---|---|
 | native-plugin-1 runtime + load path | documented, but still worth a dedicated smoke run | `README.md` plus `scripts/install_windrose_plus.sh` and `scripts/build_windrose_plus_pak.sh`; verify with a readback of the install path and a shell syntax check |
-| native-plugin-2 booting skeleton | proven on the approved dev stack | `scripts/smoke_windrose_sidecar_bridge.sh`; Alienware dev `windrose2-dev` log contains `[Lua] [windrose-sidecar-bridge] loaded in dry-run-only mode ...`; `http://127.0.0.1:8782/api/plugin/status` returns `connected: true` |
-| native-plugin-3 shared runtime plumbing | documented boundaries, test surface still expanding | `README.md` and `docs/features/server-state-observability/runtime-control-surface.md` |
-| native-plugin-4 first visible server-side action | deferred/native-hook-only for now | `operator-contract.md` and `possibility-atlas.md`; do not promote until a real write-capable hook is proven |
+| native-plugin-2 booting skeleton | proven on the approved dev stack | `scripts/smoke_windrose_sidecar_bridge.sh`; Alienware dev `windrose2-dev` status now returns `connected: true`, `mode=dev-execute`, and queue/readback message; rollback path returns it to `dry-run-only` |
+| native-plugin-3 shared runtime plumbing | implemented and dev-verified | `GET /api/plugin/smoke-options`, `POST /api/plugin/actions/execute`, `GET /api/plugin/actions/{actionRequestId}/result`, and `tests/Windrose.StateWeb.Tests/Api/WindroseEndpointsTests.cs`; `windrose2-dev` returned `status=executed` with `nativeSpawn=false` |
+| native-plugin-4 first visible server-side action | deferred/native-hook-only for now | V3 proves queue/readback only; do not promote until a real write-capable actor hook returns `nativeSpawn=true` safely |
 | native-plugin-5 packaging + rollback | documented package/install flow | `README.md`, `scripts/install_windrose_plus.sh`, `scripts/build_windrose_plus_pak.sh` |
 | native-plugin-6 verification matrix | complete as a docs sweep artifact | this section plus `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md` |
+
+## V2 safe smoke harness matrix
+
+Use `docs/roadmaps/windrose-runtime-control-surface/safe-smoke-harness-matrix.md` for the mode-by-mode smoke guidance. State Web mirrors the same safe-mode choices at `GET /api/plugin/smoke-options` for clients and scripts. It splits read-only probes from any run that can mutate a live server, and it records the expected evidence and block condition for each mode before any live smoke is attempted.
 
 Open gaps to keep visible:
 

@@ -28,7 +28,7 @@ This roadmap is also the docs mirror for the dodo-swarm priority sync on Hermes 
 - [x] The runtime-control-surface documentation now records the current capability split.
 - [x] External broadcast spike completed in docs-only form; no first-class Lua API was found and the native UE4SS C++ mod path remains the likely implementation route.
 - [x] External broadcast has been invalidated for the current Lua-only surface; a native hook or future upstream release is required.
-- [x] Spawn spike completed in docs-only form; no first-class spawn or summon API was found and the current surface appears limited to entity diagnostics plus native-hook possibilities.
+- [x] Spawn spike completed in docs-only form; the current surface appears limited to entity diagnostics plus the `HandleDodoSwarm` dry-run seam with a Dodo/Wolf allowlist and random-selection support, not a first-class live spawn API.
 - [x] Operator contract draft documented for the ChannelCheevos/Hermes control-plane boundary.
 - [x] A read-only control-surface summary endpoint now exists in State Web for operator clients.
 - [x] Enemy spawning has been disproven as a first-class Lua API; any spawn path remains native-hook only unless a future WindrosePlus surface appears.
@@ -59,6 +59,7 @@ This roadmap is also the docs mirror for the dodo-swarm priority sync on Hermes 
 - Capability map: `docs/features/server-state-observability/runtime-control-surface.md`
 - Possibility atlas: `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md`
 - Execution path: `docs/roadmaps/windrose-runtime-control-surface/execution-path.md`
+- Safe smoke harness matrix: `docs/roadmaps/windrose-runtime-control-surface/safe-smoke-harness-matrix.md`
 - ChannelCheevos integration tests: `docs/roadmaps/windrose-runtime-control-surface/channel-cheevos-integration-tests.md`
 - Channel-point redemption contract: `docs/roadmaps/windrose-runtime-control-surface/channel-point-redemption-contract.md`
 - Source docs: `docs/features/server-state-observability/architecture.md`
