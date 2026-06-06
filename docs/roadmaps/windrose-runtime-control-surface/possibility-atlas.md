@@ -46,7 +46,7 @@ Status labels used on this page:
 | Max teleporters per island policy | confirmed config contract | Windrose sidecar bridge config/status | no for config; yes for future enforcement | yes | `WINDROSE_MAX_TELEPORTERS_PER_ISLAND` writes `limits.maxTeleportersPerIsland`; live placement enforcement still needs a native hook |
 | Requested stack-size multiplier policy | confirmed config contract | Windrose sidecar bridge config/status | no for readback; yes for future enforcement | yes | `WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER` writes `limits.requestedStackSizeMultiplier`; live stack-size enforcement remains `disabled-upstream-no-live-write` until a safe inventory hook exists |
 | External broadcast / server message | deferred | WindrosePlus or native hook | yes | yes | not first-class in the current Lua-only surface |
-| Spawn enemies / entities | native-hook-only | native hook / future mod | yes | yes | not proven as a stable API today |
+| Spawn enemies / entities | native-hook-only / proof-in-progress | HandleDodoSwarm -> ExecuteDodoSwarmNative on the sidecar bridge | yes | yes | queue/readback is proven, but live native spawn still depends on UE4SS game-thread dispatch and has not been observed as `nativeSpawn=true` yet |
 | Generic world mutation | speculative | native hook | yes | yes | keep constrained and separate from observer surfaces |
 | ChannelCheevos approval / audit | deferred | ChannelCheevos + Hermes | yes | yes | operator request, approval, denial, execution, replay |
 

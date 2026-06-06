@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Windrose.StateWeb.Options;
 
@@ -180,6 +181,26 @@ public static class WindrosePluginBridgeEndpoints
                         approvalRequired = false,
                         blockIfMutationRequested = true,
                         evidence = new[] { "graceful failure message", "degraded-mode behavior", "no fallback write path" }
+                    },
+                    new
+                    {
+                        modeId = "plugin-reload",
+                        allowedTarget = "Approved dev stack or local harness while reloading the bridge/plugin boundary.",
+                        risk = "medium",
+                        readOnly = false,
+                        approvalRequired = false,
+                        blockIfMutationRequested = false,
+                        evidence = new[] { "reload log", "status after reload", "no fallback write path" }
+                    },
+                    new
+                    {
+                        modeId = "malformed-command",
+                        allowedTarget = "Dev harness or bridge endpoint with an intentionally invalid payload or unknown action.",
+                        risk = "low",
+                        readOnly = true,
+                        approvalRequired = false,
+                        blockIfMutationRequested = true,
+                        evidence = new[] { "rejected response", "validation error", "no action file written" }
                     }
                 }
             });
@@ -228,6 +249,55 @@ public static class WindrosePluginBridgeEndpoints
             {
                 return Results.Problem($"Plugin status heartbeat could not be read: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
             }
+        });
+
+        endpoints.MapGet("/api/plugin/events/recent", async (IOptions<WindroseStateOptions> options, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
+        {
+            var logger = loggerFactory.CreateLogger("WindrosePluginBridgeEndpoints");
+            var eventsPath = options.Value.PluginBridgeEventsPath;
+            if (!Directory.Exists(eventsPath))
+            {
+                return Results.Ok(new
+                {
+                    pluginId = PluginId,
+                    eventsPath,
+                    count = 0,
+                    events = Array.Empty<JsonElement>()
+                });
+            }
+
+            var eventFiles = Directory
+                .EnumerateFiles(eventsPath, "*.json", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ThenByDescending(Path.GetFileName)
+                .ToArray();
+
+            var events = new List<JsonElement>(eventFiles.Length);
+            foreach (var eventFile in eventFiles)
+            {
+                try
+                {
+                    await using var stream = File.OpenRead(eventFile);
+                    using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                    events.Add(document.RootElement.Clone());
+                }
+                catch (JsonException ex)
+                {
+                    logger.LogWarning(ex, "Skipping invalid Windrose bridge event file {EventFile}", eventFile);
+                }
+                catch (IOException ex)
+                {
+                    logger.LogWarning(ex, "Skipping unreadable Windrose bridge event file {EventFile}", eventFile);
+                }
+            }
+
+            return Results.Ok(new
+            {
+                pluginId = PluginId,
+                eventsPath,
+                count = events.Count,
+                events = events
+            });
         });
 
         endpoints.MapPost("/api/plugin/actions/dry-run", async (HttpRequest httpRequest, CancellationToken cancellationToken) =>
@@ -470,6 +540,7 @@ public static class WindrosePluginBridgeEndpoints
     {
         rootPath = options.PluginBridgePath,
         statusPath = options.PluginBridgeStatusPath,
+        eventsPath = options.PluginBridgeEventsPath,
         actionsPath = options.PluginBridgeActionsPath,
         resultsPath = options.PluginBridgeResultsPath,
         configPath = options.PluginBridgeConfigPath

@@ -8,6 +8,8 @@ The current read-only/control-surface boundary is already implemented and test-b
 - The endpoint advertises the currently supported observer-side behavior: log/save observation, overlay/summary snapshots, live status push, and auditable operator request records.
 - The same endpoint marks external broadcast, entity spawning, and generic world mutation as deferred.
 
+Use the approved dev server only for any live validation. Random-player probes stay read-only; mutation smokes must use a throwaway/non-main character or recorded consent plus rollback evidence.
+
 Validation that passed in this repo:
 
 - `dotnet test tests/Windrose.StateWeb.Tests/Windrose.StateWeb.Tests.csproj --filter "RuntimeControlSurfaceEndpointSummarizesTheReadOnlyBoundary"`
@@ -42,9 +44,9 @@ The current repo surfaces split into four useful buckets:
 | Surface / candidate hook | Classification | Evidence in repo | Why it matters |
 |---|---|---|---|
 | `GET /api/plugin/manifest`, `GET /api/plugin/status`, and the bridge heartbeat | read-only | State Web reads the plugin heartbeat and manifests the current policy values | Safe observer/readback surface; no live mutation |
+| `GET /api/plugin/events/recent` and `windrose_plugin_bridge/events/*.json` | read-only typed event publishing | The WindrosePlus plugin writes heartbeat/readback/error V3 envelopes into the shared bridge directory and State Web reads them back through a dedicated endpoint | Safe event publishing, no mutation |
 | `HandleDodoSwarm` in `plugins/windrose-sidecar-bridge/init.lua` plus `/api/plugin/actions/execute` | dev-only queue/readback | State Web writes approved action files under `windrose_plugin_bridge/actions/`; WindrosePlus consumes them and writes `results/{actionRequestId}.json` on `windrose2-dev`; result reports `nativeSpawn=false` | This proves command delivery and plugin-side writeback, but not native in-game spawning |
-| Teleporter placement / island cap enforcement | mutation-capable target, but currently unsafe/unknown | `WINDROSE_MAX_TELEPORTERS_PER_ISLAND` is only echoed through config/status today; docs say live placement still needs a native hook | Best candidate for a future live guard because it can start as read-only counting and only later reject/queue placements |
-| Summon totem object placement and inventory stack enforcement | unsafe/unknown | No concrete live hook is proven; object ids must come from the native object registry or manifest, and stack-size docs explicitly avoid writing `stack_size` / `inventory_size` because upstream inventory validation can break | Keep these deferred until a safe native/upstream surface is demonstrated |
+| `Summon totem object placement and inventory stack enforcement` | unsafe/unknown | No concrete live hook is proven; object ids must come from the native object registry or manifest, and stack-size docs explicitly avoid writing `stack_size` / `inventory_size` because upstream inventory validation can break | Keep these deferred until a safe native/upstream surface is demonstrated |
 
 Recommended first native proof: teleporter-counting / placement-guard hook.
 
@@ -73,7 +75,20 @@ ChannelCheevos should consume those payloads and helpers from NuGet and normaliz
 
 Goal: prove the minimal write-capable bridge for `windrose.spawn.dodo_swarm` without pretending native actor spawning exists yet.
 
-Implemented V3 boundary:
+Exact hook entrypoint:
+
+- public bridge handler: `HandleDodoSwarm`
+- native probe: `ExecuteDodoSwarmNative`
+- dispatch gate: `ExecuteInGameThread` plus `game_thread_dispatch_enabled()`
+
+Current proof status:
+
+- dry-run remains the default behavior
+- dev-execute queue/readback is proven on `windrose2-dev`
+- the current live-server evidence still reports `nativeSpawn=false` when UE4SS game-thread dispatch is disabled (`HookEngineTick=0` and `HookUObjectProcessEvent=0`)
+- because of that, the native gameplay spawn itself remains unproven and should stay in its own follow-up card
+
+Implemented V4 boundary:
 
 - `POST /api/plugin/actions/execute` is gated by `WindroseState__PluginBridgeDevExecutionEnabled=true` and requires `approvalId` plus `modeId` of `operator-non-main-character` or `consenting-dev-player`.
 - Accepted requests are written as JSON action files in `windrose_plugin_bridge/actions/` and indexed in `pending.txt`.
@@ -94,6 +109,12 @@ The local contract shape is the typed spawn request mirrored in ChannelCheevos:
 - random summon selection: `summon.selection = "random"` or `summon.creature = "random"` selects one allowed creature from `summon.creaturePool` or the default Dodo/Wolf pool
 - dry-run / logging output: log the resolved target, count, radius/offset, summon selection mode, creature id/name, and whether the hook was skipped or rejected
 - failure modes: unknown target player, invalid count or spawn radius, hook unavailable, unsafe live server state, or live execution without approval
+
+Next proof step:
+
+- keep the current queue/readback path default-off for live mutation
+- move the native actor proof into a separate gated-live card that can only be attempted on a throwaway dev stack with rollback and crash observation
+- once that card exists, the first observable success criteria should be `nativeSpawn=true` and a concrete spawned count in the result file, not just action acceptance
 
 ### Native-hook seam: summon totem object dry-run contract
 

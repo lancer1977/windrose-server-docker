@@ -31,6 +31,7 @@ Additional implementation notes and planning docs live under [`docs/`](docs/READ
 - [`docs/features/server-state-observability/`](docs/features/server-state-observability/README.md) tracks log, save, and checkpoint surfaces for exposing server state.
 - [`docs/roadmaps/companion-state-webserver/`](docs/roadmaps/companion-state-webserver/README.md) tracks the phased plan for a companion-style webserver/API.
 - [`docs/roadmaps/windrose-runtime-control-surface/`](docs/roadmaps/windrose-runtime-control-surface/README.md) tracks the live-mutation backlog, operator contract, and possibility atlas for WindrosePlus and future write-capable surfaces.
+- Current Windrose Kanban references: `t_46058fee` (readiness/dry-run validation), `t_77de9b18` (approved Adventurer dry-run evidence), `t_971cd00d` (operator non-main smoke), and `t_02b23bc0` (typed plugin-sidecar V3 contract, blocked for review).
 - [`src/Windrose.StateWeb.Core/`](src/Windrose.StateWeb.Core/Windrose.StateWeb.Core.csproj) holds the reusable payload/response models and helper abstractions shared by Windrose and future consumers.
 - The shared core layer is packable and published to nuget.org from GitHub Actions for downstream consumers that should not depend on this repository as a sibling checkout.
 
@@ -64,7 +65,10 @@ services:
 The compose file also includes an optional internal state dashboard sidecar at `http://<host>:8781`. It mounts `./server-files` read-only and exposes parsed server state, player lifecycle events, and save metadata.
 The dashboard is read-only, but it still surfaces sensitive server metadata such as player names, account ids, invite codes, and backup details. Do not expose it directly to the public internet without an access-control layer.
 If you want the sidecar to push live state into `channel-cheevos`, set the `WINDROSE_STATE_*` env vars for the `windrose-state-web` service. The push is off by default and uses a shared webkey in the query string. You can also select a live-push target with `WINDROSE_STATE_CHANNEL_CHEEVOS_TARGET=dev|debug|prod` and point that target at a matching hub URL and webkey pair without changing application code.
+The read-only ChannelCheevos polling/display sequence is tracked by Hermes Kanban `t_355a3ed5` with docs mirror `t_8bd3aa11`. Dependency order is: ChannelCheevos read-only state contract `t_a49b59df` (closed via `t_80caec3f`), Windrose polling/UI `t_e81ad14c` (closed via `t_e5428f1b`, `t_f9a3cd43`, `t_82824d04`), docs mirror, then validation gate `t_9c674710`. Keep this path display-only and secret-free: no raw webkeys in docs/logs/tests, no writeback to ChannelCheevos, no Portainer/deploy mutation, and no gameplay mutation from this mirror.
 Set `WindroseState__RedactSensitiveMetadata=true` if you want the state web responses to mask invite codes, server names, and player identity fields for broader sharing.
+
+Live validation should stay on a dev server only. Treat random-player probes as read-only, and use a clearly named throwaway/non-main character or recorded consent before any smoke that could mutate player state.
 
 The sidecar also supports optional Microsoft logging to Seq. Set `Seq__ServerUrl` and `Seq__ApiKey` for the `windrose-state-web` service to forward structured logs to `seq.polyhydragames.com` or another Seq instance using the same `ILogger` pipeline as the rest of the app.
 
@@ -234,18 +238,22 @@ The `server-files` mount is read-only inside the sidecar. The first build is int
 
 ### Plugin / sidecar bridge
 
-The repo now includes a dry-run Windrose+ Lua plugin at `plugins/windrose-sidecar-bridge/`. When both `WINDROSE_PLUS_ENABLED=true` and `WINDROSE_SIDECAR_PLUGIN_ENABLED=true`, `scripts/install_windrose_plus.sh` copies it into `server-files/windrose_plus_mods/windrose-sidecar-bridge/`, creates `server-files/windrose_plugin_bridge/config.json`, and keeps the install idempotent on every restart. The bridge config includes `limits.maxTeleportersPerIsland`, sourced from `WINDROSE_MAX_TELEPORTERS_PER_ISLAND`.
+The repo now includes a Windrose+ Lua plugin at `plugins/windrose-sidecar-bridge/`. When both `WINDROSE_PLUS_ENABLED=true` and `WINDROSE_SIDECAR_PLUGIN_ENABLED=true`, `scripts/install_windrose_plus.sh` copies it into `server-files/windrose_plus_mods/windrose-sidecar-bridge/`, creates `server-files/windrose_plugin_bridge/config.json`, and keeps the install idempotent on every restart. The bridge config includes `limits.maxTeleportersPerIsland`, sourced from `WINDROSE_MAX_TELEPORTERS_PER_ISLAND`.
 
 The bridge proves the plugin-to-sidecar lifecycle without live mutation:
 
 1. Windrose+ loads the Lua plugin from the friendly mods folder.
 2. The plugin writes `server-files/windrose_plugin_bridge/status.json` with its mode and sidecar URL.
-3. The heartbeat echoes contract-only policy values such as `limits.maxTeleportersPerIsland`, `limits.requestedStackSizeMultiplier`, and `limits.stackSizeEnforcement` so ChannelCheevos/tests can read the configured policy values.
-4. State Web reads that heartbeat through its read-only `/server-files` mount.
-5. Operators can inspect:
+3. The plugin writes typed V3 event envelopes to `server-files/windrose_plugin_bridge/events/` so the sidecar can read heartbeat, readback, and error publications without mutating the game.
+4. The heartbeat echoes contract-only policy values such as `limits.maxTeleportersPerIsland`, `limits.requestedStackSizeMultiplier`, and `limits.stackSizeEnforcement` so ChannelCheevos/tests can read the configured policy values.
+5. State Web reads that heartbeat through its read-only `/server-files` mount.
+6. Operators can inspect:
    - `GET /api/plugin/manifest` for the sidecar/plugin contract.
    - `GET /api/plugin/status` for the latest plugin heartbeat.
+   - `GET /api/plugin/events/recent` for typed bridge event envelopes.
    - `POST /api/plugin/actions/dry-run` for request validation and dry-run dodo-swarm logging.
+
+The exact dodo-swarm entrypoint is `HandleDodoSwarm`; it can hand off to `ExecuteDodoSwarmNative` only when the UE4SS game-thread dispatch gate is available. That native path is still proof-in-progress, so keep live mutation default-off until the separate gated-live card is ready.
 
 Example dry-run request:
 

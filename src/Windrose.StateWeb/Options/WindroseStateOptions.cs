@@ -41,6 +41,7 @@ public sealed class WindroseStateOptions
     public string ServerDescriptionPath => Path.Combine(ServerFilesPath, ServerDescriptionRelativePath);
     public string PluginBridgePath => Path.Combine(ServerFilesPath, PluginBridgeRelativePath);
     public string PluginBridgeStatusPath => Path.Combine(PluginBridgePath, "status.json");
+    public string PluginBridgeEventsPath => Path.Combine(PluginBridgePath, "events");
     public string PluginBridgeActionsPath => Path.Combine(PluginBridgePath, "actions");
     public string PluginBridgeResultsPath => Path.Combine(PluginBridgePath, "results");
     public string PluginBridgeConfigPath => Path.Combine(PluginBridgePath, "config.json");

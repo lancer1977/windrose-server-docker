@@ -16,7 +16,7 @@ The roadmap covers four capabilities:
 3. General external live-state modification
 4. The operator contract that will eventually expose those actions safely to ChannelCheevos/Hermes clients
 
-This roadmap is also the docs mirror for the dodo-swarm priority sync on Hermes Kanban `t_810768ef`; it documents the approval-gated boundary only and does not approve or execute live dodo spawning.
+This roadmap is also the docs mirror for the approved Windrose validation path on Hermes Kanban `t_46058fee`, `t_77de9b18`, and `t_971cd00d`; it documents the approval-gated boundary only and does not approve or execute live dodo spawning.
 
 ## Current Assessment
 
@@ -35,6 +35,7 @@ This roadmap is also the docs mirror for the dodo-swarm priority sync on Hermes 
 - [x] The minimum safe external mutation contract is documented in `operator-contract.md`.
 - [x] The ChannelCheevos/Hermes operator path for approved runtime actions is documented in `operator-contract.md`.
 - [x] The runtime action capability report endpoint now separates known, enabled, disabled, and unsupported actions with explicit reasons.
+- [x] Approved dev readiness/dry-run and operator non-main smoke evidence now exists on `t_46058fee`, `t_77de9b18`, and `t_971cd00d`; the typed plugin-sidecar V3 contract review remains blocked on `t_02b23bc0`.
 
 ## Implementation Recommendations
 
@@ -43,6 +44,7 @@ This roadmap is also the docs mirror for the dodo-swarm priority sync on Hermes 
 - Treat external broadcast, spawn, and broader world mutation as separate proof slices instead of one broad API.
 - Require request -> approval -> execution -> audit for every live action.
 - Keep ChannelCheevos / Hermes as the approval and operator surface, not the transport bridge.
+- Keep live validation on a dev server only. Random-player probes stay read-only; any mutation smoke needs a throwaway/non-main character or recorded consent plus a rollback plan.
 
 ## Desired Outcome
 

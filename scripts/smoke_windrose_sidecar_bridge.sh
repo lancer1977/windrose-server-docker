@@ -73,6 +73,16 @@ WINDROSE_MAX_TELEPORTERS_PER_ISLAND="4" \
 WINDROSE_REQUESTED_STACK_SIZE_MULTIPLIER="2" \
     "$LUA_BIN" "$TARGET_DIR/init.lua" > "$LUA_LOG" 2>&1
 
+set -- "$LUA_BRIDGE_ROOT"/events/heartbeat-*.json
+HEARTBEAT_EVENT=${1:-}
+if [ ! -f "$HEARTBEAT_EVENT" ]; then
+    echo "smoke_windrose_sidecar_bridge: missing heartbeat event file in $LUA_BRIDGE_ROOT/events" >&2
+    exit 1
+fi
+
+jq -e '.messageType == "windrose.heartbeat.v3" and .schemaVersion == "windrose.plugin_sidecar.v3" and .componentId == "windrose-sidecar-bridge" and .status == "healthy"' \
+    "$HEARTBEAT_EVENT" >/dev/null
+
 grep -F "[windrose-sidecar-bridge] loaded in dry-run-only mode" "$LUA_LOG" >/dev/null
 grep -F "policy maxTeleportersPerIsland=4 enforcement=contract-only" "$LUA_LOG" >/dev/null
 grep -F "policy requestedStackSizeMultiplier=2 enforcement=disabled-upstream-no-live-write" "$LUA_LOG" >/dev/null

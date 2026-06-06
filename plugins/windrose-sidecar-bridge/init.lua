@@ -96,6 +96,72 @@ local function json_number(body, key)
   return tonumber(body:match(pattern))
 end
 
+local event_sequence = 0
+
+local function next_event_id(prefix)
+  event_sequence = event_sequence + 1
+  return string.format("%s-%s-%04d", prefix or "event", os.date("%Y%m%d%H%M%S"), event_sequence)
+end
+
+local function write_bridge_event(message_type, body, message_id)
+  mkdir_p(path_join(bridge_root, "events"))
+  local event_id = message_id or next_event_id("event")
+  local event_path = path_join(path_join(bridge_root, "events"), event_id .. ".json")
+  if not write_file(event_path, body) then
+    print("[" .. plugin_id .. "] failed to write bridge event type=" .. tostring(message_type) .. " path=" .. tostring(event_path))
+    return false, event_id, event_path
+  end
+  return true, event_id, event_path
+end
+
+local function emit_heartbeat_event(status, notes)
+  local message_id = next_event_id("heartbeat")
+  local timestamp = now_utc()
+  local body = string.format(
+    '{"messageType":"windrose.heartbeat.v3","schemaVersion":"windrose.plugin_sidecar.v3","messageId":"%s","correlationId":"%s","originSurface":"WindrosePlus","targetSurface":"StateWeb","createdAtUtc":"%s","componentId":"%s","status":"%s","heartbeatAtUtc":"%s","notes":%s}\n',
+    json_escape(message_id),
+    json_escape(plugin_id .. ":" .. mode),
+    json_escape(timestamp),
+    json_escape(plugin_id),
+    json_escape(status),
+    json_escape(timestamp),
+    notes and ('"' .. json_escape(notes) .. '"') or "null"
+  )
+  return write_bridge_event("windrose.heartbeat.v3", body, message_id)
+end
+
+local function emit_player_readback_event(player_id, display_name, is_online, correlation_id, notes)
+  local message_id = next_event_id("player-readback")
+  local timestamp = now_utc()
+  local body = string.format(
+    '{"messageType":"windrose.player.state.readback.v3","schemaVersion":"windrose.plugin_sidecar.v3","messageId":"%s","correlationId":%s,"originSurface":"WindrosePlus","targetSurface":"StateWeb","createdAtUtc":"%s","playerId":"%s","displayName":"%s","isOnline":%s,"observedAtUtc":"%s","location":null,"healthPercent":null,"staminaPercent":null,"lastKnownCommandId":null,"notes":%s}\n',
+    json_escape(message_id),
+    correlation_id and ('"' .. json_escape(correlation_id) .. '"') or "null",
+    json_escape(timestamp),
+    json_escape(player_id),
+    json_escape(display_name),
+    is_online and "true" or "false",
+    json_escape(timestamp),
+    notes and ('"' .. json_escape(notes) .. '"') or "null"
+  )
+  return write_bridge_event("windrose.player.state.readback.v3", body, message_id)
+end
+
+local function emit_error_event(error_code, message, correlation_id, related_message_id, retryable)
+  local message_id = next_event_id("error")
+  local body = string.format(
+    '{"messageType":"windrose.error.v3","schemaVersion":"windrose.plugin_sidecar.v3","messageId":"%s","correlationId":"%s","originSurface":"WindrosePlus","targetSurface":"StateWeb","createdAtUtc":"%s","errorCode":"%s","message":"%s","isRetryable":%s,"relatedMessageId":%s}\n',
+    json_escape(message_id),
+    json_escape(correlation_id or (plugin_id .. ":" .. mode)),
+    json_escape(now_utc()),
+    json_escape(error_code),
+    json_escape(message),
+    retryable and "true" or "false",
+    related_message_id and ('"' .. json_escape(related_message_id) .. '"') or "null"
+  )
+  return write_bridge_event("windrose.error.v3", body, message_id)
+end
+
 local bridge_config = read_file(path_join(bridge_root, "config.json"))
 mode = json_string(bridge_config, "mode") or mode
 max_teleporters_per_island = json_number(bridge_config, "maxTeleportersPerIsland") or max_teleporters_per_island
@@ -107,6 +173,7 @@ local function write_status(message)
   mkdir_p(bridge_root)
   mkdir_p(path_join(bridge_root, "actions"))
   mkdir_p(path_join(bridge_root, "results"))
+  mkdir_p(path_join(bridge_root, "events"))
 
   local status = string.format(
     '{"pluginId":"%s","status":"started","startedAt":"%s","sidecarUrl":"%s","mode":"%s","limits":{"maxTeleportersPerIsland":%d,"requestedStackSizeMultiplier":%d,"stackSizeEnforcement":"disabled-upstream-no-live-write"},"capabilities":{"nativeActorSpawn":%s,"approvedDevExecutionOnly":true},"message":"%s"}\n',
@@ -121,6 +188,7 @@ local function write_status(message)
   )
 
   write_file(path_join(bridge_root, "status.json"), status)
+  emit_heartbeat_event(mode == "dev-execute" and "healthy" or "healthy", mode == "dev-execute" and "plugin loaded; dev execution queue enabled; native actor spawn probe available" or "plugin loaded; dry-run native-hook seam available")
 end
 
 local creature_specs = {
@@ -334,8 +402,17 @@ local function HandleDodoSwarm(request)
 
   if mode ~= "dev-execute" then
     print("[" .. plugin_id .. "] denied HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=denied reason=plugin-mode-" .. tostring(mode))
+    emit_error_event("plugin_mode_denied", "HandleDodoSwarm denied because plugin mode is not dev-execute.", action_request_id, nil, false)
     return false, "denied-plugin-mode", false
   end
+
+  local pawn, target_label = resolve_target_pawn(request.targetPlayer)
+  if not pawn then
+    emit_error_event("target_lookup_failed", tostring(target_label), action_request_id, nil, false)
+    return false, target_label, 0
+  end
+
+  emit_player_readback_event(tostring(target or target_label), tostring(target_label), true, action_request_id, "Read-only target lookup completed without mutating player state.")
 
   -- Prefer game-thread dispatch when UE4SS exposes it; UObject enumeration and
   -- SpawnActor are unsafe from the RCON/LoopAsync thread. The dispatched closure
@@ -348,6 +425,7 @@ local function HandleDodoSwarm(request)
         write_action_result(request, "executed", true, outcome or "native-spawned", "Plugin consumed the approved dev action and spawned native actor(s) on the game thread.", true, spawned or 0)
       else
         print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=native-spawn-failed nativeSpawn=false error=" .. tostring(outcome))
+        emit_error_event("native_spawn_failed", tostring(outcome or "native-spawn-failed"), action_request_id, nil, true)
         write_action_result(request, "failed", false, outcome or "native-spawn-failed", "Plugin dispatched the native spawn action to the game thread, but it did not complete.", false, spawned or 0)
       end
     end)
@@ -357,6 +435,7 @@ local function HandleDodoSwarm(request)
 
   if not game_thread_dispatch_enabled() then
     print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=native-spawn-blocked-game-thread-dispatch-disabled nativeSpawn=false")
+    emit_error_event("game_thread_dispatch_disabled", "Native spawn blocked because the game-thread dispatch gate is disabled.", action_request_id, nil, true)
     return false, "native-spawn-blocked-game-thread-dispatch-disabled", false, 0
   end
 
@@ -370,6 +449,7 @@ local function HandleDodoSwarm(request)
   end
 
   print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=native-spawn-failed nativeSpawn=false error=" .. tostring(outcome))
+  emit_error_event("native_spawn_failed", tostring(outcome or "native-spawn-failed"), action_request_id, nil, true)
   return false, outcome or "native-spawn-failed", false, spawned or 0
 end
 
@@ -422,6 +502,7 @@ local function process_action(action_request_id)
   local body = read_file(action_path)
   if not body then
     write_action_result({ actionRequestId = action_request_id }, "failed", false, "action-file-missing", "Action file was listed in pending.txt but could not be read.")
+    emit_error_event("action_file_missing", "Action file was listed in pending.txt but could not be read.", action_request_id, nil, true)
     return true
   end
 
@@ -430,11 +511,13 @@ local function process_action(action_request_id)
 
   if action.approved ~= true or action.dryRun == true then
     write_action_result(action, "denied", false, "approval-required", "Queued action was not approved for dev execution.")
+    emit_error_event("approval_required", "Queued action was not approved for dev execution.", action.actionRequestId, nil, false)
     return true
   end
 
   if action.actionId ~= "windrose.spawn.dodo_swarm" or action.handler ~= "HandleDodoSwarm" then
     write_action_result(action, "denied", false, "unsupported-action", "Only windrose.spawn.dodo_swarm/HandleDodoSwarm is allowed in V4.")
+    emit_error_event("unsupported_action", "Only windrose.spawn.dodo_swarm/HandleDodoSwarm is allowed in V4.", action.actionRequestId, nil, false)
     return true
   end
 
@@ -485,6 +568,7 @@ if WindrosePlus and WindrosePlus.API and type(WindrosePlus.API.registerTickCallb
   print("[" .. plugin_id .. "] registered action queue poller intervalMs=2000")
 else
   print("[" .. plugin_id .. "] action queue poller not registered; WindrosePlus.API.registerTickCallback unavailable")
+  emit_error_event("queue_poller_unavailable", "WindrosePlus.API.registerTickCallback unavailable; action queue polling is disabled.", plugin_id .. ":" .. mode, nil, true)
 end
 
 return {

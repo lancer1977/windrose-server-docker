@@ -1,14 +1,14 @@
-# Windrose V2 Safe Smoke Harness Matrix
+# Windrose V4 Safe Smoke Harness Matrix
 
 ## Purpose
 
 This matrix separates safe read-only smokes from any smoke that could mutate a live Windrose server.
-It is the guidance surface for the V2 smoke harness only; it does not authorize live production testing.
+It is the guidance surface for the V4 smoke harness; it does not authorize live production testing.
 State Web also exposes the same run-mode guidance as machine-readable readback at `GET /api/plugin/smoke-options` so operator clients and smoke scripts can discover the safe modes without scraping this document.
 
 ## Global rules
 
-- Dev server only for any smoke that touches a live Windrose runtime or player state.
+- Dev server only for any smoke that touches a live Windrose runtime or player state; production/main-server mutation is out of scope for this matrix.
 - Player-bound smokes default to a non-main / throwaway character.
 - If a player is not clearly non-main/throwaway, treat the run as requiring explicit consent and a rollback plan.
 - Random player testing is read-only only unless explicit consent exists.
@@ -25,6 +25,8 @@ State Web also exposes the same run-mode guidance as machine-readable readback a
 | Consenting dev player | Dev server, explicitly consenting player account | Medium / High | Dev-mode server, written or otherwise recorded consent, timeboxed window, rollback/log capture plan, exact scope of the smoke | Consent record, pre/post state, logs, timestamps, and evidence that the action matched the agreed scope | Block if consent is missing, not recorded, or the run would affect a non-consenting player |
 | Random online dev-player read-only probe | Any connected dev player, but read-only only | Low | Dev-mode server, read-only endpoint or observer path only, no mutation commands, no prompts requiring player action | Probe output, status response, observation log, and confirmation that no writes occurred | Block immediately if the probe would write, prompt, grant items, teleport, or otherwise mutate state |
 | Sidecar / plugin-down failure | Dev stack or local harness with the plugin or sidecar intentionally disabled or unreachable | Low | Failure intentionally induced in a non-prod environment, no fallback write path, no live players affected | Graceful failure message, degraded-mode behavior, retry or timeout evidence, no crash or hang | Block if the harness auto-falls back to a mutating path or if the failure test is pointed at prod/main |
+| Plugin reload | Approved dev stack or local harness while reloading the bridge/plugin boundary | Medium | Dev-only target, explicit reload step, log capture, rollback or revert plan | Reload log, status after reload, no fallback write path | Block if the reload targets prod/main or the harness silently falls back to a mutating path |
+| Malformed command | Dev harness or bridge endpoint with an intentionally invalid payload or unknown action | Low | Dev-only target, intentionally invalid payload, no external side effects | Rejected response, validation error, no action file written | Block if the invalid command is redirected into a real mutation path or production target |
 
 ## Mutating smoke checklist
 
@@ -63,10 +65,19 @@ Do not expand this mode into writes; if a mutation is needed, switch to a consen
 Use this to prove the harness fails safely when the bridge is unavailable.
 The desired result is a clean failure, not a hidden fallback into mutation.
 
+### Plugin reload
+Use this only on a dev stack where the bridge can be reloaded safely and observed.
+Treat it as an operational proof: the reload should be visible in logs and the post-reload status should still resolve.
+
+### Malformed command
+Use this to prove validation and negative-path handling.
+The desired result is a rejection that stays inside the harness; it should never become a real mutation.
+
 ## References
 
 - `docs/roadmaps/windrose-runtime-control-surface/README.md`
 - `docs/roadmaps/windrose-runtime-control-surface/execution-path.md`
 - `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md`
 - `plugins/windrose-sidecar-bridge/README.md`
+- `scripts/smoke_windrose_v4_matrix.sh`
 - `scripts/smoke_windrose_sidecar_bridge.sh`

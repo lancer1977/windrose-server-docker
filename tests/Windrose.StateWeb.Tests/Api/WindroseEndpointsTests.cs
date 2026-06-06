@@ -163,6 +163,8 @@ public sealed class WindroseEndpointsTests
         Assert.Contains("\"modeId\":\"operator-non-main-character\"", body);
         Assert.Contains("\"modeId\":\"consenting-dev-player\"", body);
         Assert.Contains("\"modeId\":\"sidecar-plugin-down-failure\"", body);
+        Assert.Contains("\"modeId\":\"plugin-reload\"", body);
+        Assert.Contains("\"modeId\":\"malformed-command\"", body);
         Assert.Contains("random player testing is read-only only", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("non-main / throwaway", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("blockIfMutationRequested", body);
@@ -206,6 +208,41 @@ public sealed class WindroseEndpointsTests
             Assert.Contains("\"requestedStackSizeMultiplier\":2", body);
             Assert.Contains("\"stackSizeEnforcement\":\"disabled-upstream-no-live-write\"", body);
             Assert.Contains("test heartbeat", body);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PluginBridgeRecentEventsEndpointReturnsTypedV3BridgeEvents()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"windrose-plugin-events-test-{Guid.NewGuid():N}");
+        var eventsRoot = Path.Combine(tempRoot, "windrose_plugin_bridge", "events");
+        Directory.CreateDirectory(eventsRoot);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(eventsRoot, "20260605T000000Z-heartbeat.json"),
+            """
+            {"messageType":"windrose.heartbeat.v3","schemaVersion":"windrose.plugin_sidecar.v3","messageId":"msg-heartbeat","correlationId":"startup","originSurface":"WindrosePlus","targetSurface":"StateWeb","createdAtUtc":"2026-06-05T00:00:00Z","componentId":"windrose-sidecar-bridge","status":"healthy","heartbeatAtUtc":"2026-06-05T00:00:00Z","notes":"plugin loaded in dry-run-only mode"}
+            """);
+        await File.WriteAllTextAsync(
+            Path.Combine(eventsRoot, "20260605T000001Z-readback.json"),
+            """
+            {"messageType":"windrose.server.state.readback.v3","schemaVersion":"windrose.plugin_sidecar.v3","messageId":"msg-readback","originSurface":"WindrosePlus","targetSurface":"StateWeb","createdAtUtc":"2026-06-05T00:00:01Z","serverId":"windrose-sidecar-bridge","serverName":"Windrose sidecar bridge","isHealthy":true,"observedAtUtc":"2026-06-05T00:00:01Z","onlinePlayers":0,"maxPlayers":10,"currentBiome":"","notes":"read-only status emission"}
+            """);
+
+        try
+        {
+            await using var app = CreateApp(serverFilesPath: tempRoot);
+            await app.StartAsync();
+            var body = await InvokeGetAsync(app, "/api/plugin/events/recent");
+
+            Assert.Contains("\"count\":2", body);
+            Assert.Contains("windrose.heartbeat.v3", body);
+            Assert.Contains("windrose.server.state.readback.v3", body);
+            Assert.Contains("\"eventsPath\"", body);
         }
         finally
         {
