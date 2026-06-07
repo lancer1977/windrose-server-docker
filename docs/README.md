@@ -10,6 +10,7 @@
 - [Server State Observability](features/server-state-observability/README.md) - log, save, and checkpoint surfaces for exposing dedicated-server state.
 - [Windrose Runtime Control Surface Map](features/server-state-observability/runtime-control-surface.md) - what WindrosePlus can observe, mutate, and still cannot do yet.
 - [Windrose Runtime Possibility Atlas](roadmaps/windrose-runtime-control-surface/possibility-atlas.md) - the canonical inventory of current, deferred, and speculative runtime actions.
+- [Windrose V4 Candidate Inventory](roadmaps/windrose-runtime-control-surface/v4-candidate-inventory.md) - the parked matrix for quest, reward, event, chat, overlay, summary, and diagnostics ideas.
 - [Windrose Runtime Control Surface Roadmap](roadmaps/windrose-runtime-control-surface/README.md) - the backlog for chat, spawn, mutation, and operator integration proof work.
 - [Windrose Runtime Control Surface Execution Path](roadmaps/windrose-runtime-control-surface/execution-path.md) - feasible Lua/RCON and shared-contract slices.
 - [Windrose Runtime Control Surface Operator Contract](roadmaps/windrose-runtime-control-surface/operator-contract.md) - the durable control-plane boundary for Windrose, ChannelCheevos, and Hermes.

@@ -15,6 +15,13 @@ State Web also exposes the same run-mode guidance as machine-readable readback a
 - Any mutating smoke must capture logs, timestamps, the exact command/payload, and the rollback or revert path before it runs.
 - If the target, consent, or environment is unclear, block instead of guessing.
 
+## Bridge direction matrix
+
+| Direction | Surface | Risk level | Expected evidence | Failure / block expectation |
+|---|---|---|---|---|
+| Plugin → sidecar events | `GET /api/plugin/events/recent` and `windrose_plugin_bridge/events/*.json` | Low | Typed heartbeat/readback/error envelopes are visible through the read-only event endpoint; no mutation is required | If the plugin is down or the event payload is malformed, the path stays read-only and degrades safely instead of inventing data |
+| Sidecar → plugin commands/results | `POST /api/plugin/actions/execute` and `GET /api/plugin/actions/{actionRequestId}/result` | Medium | Approved actions are queued by State Web, then read back from plugin result JSON; `nativeSpawn=false` is a valid failed-safe outcome | Dispatch-disabled or hook-disabled outcomes must be reported as failed-safe outcomes, never as successful live spawning |
+
 ## Smoke matrix
 
 | Mode | Allowed target | Risk level | Prerequisites | Expected evidence | Block condition |

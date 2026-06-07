@@ -300,11 +300,13 @@ public static class WindrosePluginBridgeEndpoints
             });
         });
 
-        endpoints.MapPost("/api/plugin/actions/dry-run", async (HttpRequest httpRequest, CancellationToken cancellationToken) =>
+        endpoints.MapPost("/api/plugin/actions/dry-run", async (HttpRequest httpRequest, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
         {
+            var logger = loggerFactory.CreateLogger("WindrosePluginBridgeActions");
             var parsed = await ReadActionRequestAsync(httpRequest, dryRun: true, cancellationToken);
             if (parsed.Error is not null)
             {
+                logger.LogWarning("Windrose plugin action dry-run rejected during parse");
                 return parsed.Error;
             }
 
@@ -313,6 +315,11 @@ public static class WindrosePluginBridgeEndpoints
             var validationErrors = Validate(request, summon);
             if (validationErrors.Count > 0)
             {
+                logger.LogWarning(
+                    "Windrose plugin action dry-run validation failed actionId={ActionId} targetPlayer={TargetPlayer} errors={Errors}",
+                    request.ActionId,
+                    request.TargetPlayer,
+                    string.Join("; ", validationErrors));
                 return Results.BadRequest(new
                 {
                     pluginId = PluginId,
@@ -324,15 +331,27 @@ public static class WindrosePluginBridgeEndpoints
 
             var creature = ResolveCreature(summon);
             var logLine = $"[windrose-sidecar-bridge] dry-run HandleDodoSwarm target={request.TargetPlayer!.Trim()} count={summon.Count} radiusMeters={summon.RadiusMeters:0.##} offsetMeters={summon.OffsetMeters:0.##} selectionMode={summon.SelectionMode} creatureId={creature.Id} creatureName={creature.Name} result=not-executed approvalRequired=true";
+            logger.LogInformation(
+                "Windrose plugin action dry-run validated actionId={ActionId} handler=HandleDodoSwarm targetPlayer={TargetPlayer} creatureId={CreatureId} creatureName={CreatureName} count={Count} radiusMeters={RadiusMeters} offsetMeters={OffsetMeters} selectionMode={SelectionMode} outcome=validated-dry-run-only",
+                request.ActionId,
+                request.TargetPlayer.Trim(),
+                creature.Id,
+                creature.Name,
+                summon.Count,
+                summon.RadiusMeters,
+                summon.OffsetMeters,
+                summon.SelectionMode);
 
             return Results.Ok(BuildValidatedActionResponse(request, summon, creature, dryRun: true, queued: false, actionRequestId: null, outcome: "validated-dry-run-only", logLine));
         });
 
-        endpoints.MapPost("/api/plugin/actions/execute", async (HttpRequest httpRequest, IOptions<WindroseStateOptions> options, CancellationToken cancellationToken) =>
+        endpoints.MapPost("/api/plugin/actions/execute", async (HttpRequest httpRequest, IOptions<WindroseStateOptions> options, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
         {
+            var logger = loggerFactory.CreateLogger("WindrosePluginBridgeActions");
             var parsed = await ReadActionRequestAsync(httpRequest, dryRun: false, cancellationToken);
             if (parsed.Error is not null)
             {
+                logger.LogWarning("Windrose plugin action execute rejected during parse");
                 return parsed.Error;
             }
 
@@ -357,6 +376,14 @@ public static class WindrosePluginBridgeEndpoints
 
             if (validationErrors.Count > 0)
             {
+                logger.LogWarning(
+                    "Windrose plugin action execute validation failed actionId={ActionId} targetPlayer={TargetPlayer} approvalIdPresent={ApprovalIdPresent} modeId={ModeId} devExecutionEnabled={DevExecutionEnabled} errors={Errors}",
+                    request.ActionId,
+                    request.TargetPlayer,
+                    !string.IsNullOrWhiteSpace(request.ApprovalId),
+                    request.ModeId,
+                    options.Value.PluginBridgeDevExecutionEnabled,
+                    string.Join("; ", validationErrors));
                 return Results.BadRequest(new
                 {
                     pluginId = PluginId,
@@ -378,13 +405,30 @@ public static class WindrosePluginBridgeEndpoints
             await File.AppendAllTextAsync(Path.Combine(options.Value.PluginBridgeActionsPath, "pending.txt"), actionRequestId + Environment.NewLine, cancellationToken);
 
             var logLine = $"[windrose-sidecar-bridge] queued HandleDodoSwarm actionRequestId={actionRequestId} target={request.TargetPlayer!.Trim()} count={summon.Count} radiusMeters={summon.RadiusMeters:0.##} offsetMeters={summon.OffsetMeters:0.##} selectionMode={summon.SelectionMode} creatureId={creature.Id} creatureName={creature.Name} approvalId={request.ApprovalId!.Trim()} modeId={request.ModeId!.Trim()}";
+            logger.LogInformation(
+                "Windrose plugin action queued actionRequestId={ActionRequestId} actionId={ActionId} handler=HandleDodoSwarm targetPlayer={TargetPlayer} creatureId={CreatureId} creatureName={CreatureName} count={Count} radiusMeters={RadiusMeters} offsetMeters={OffsetMeters} selectionMode={SelectionMode} approvalId={ApprovalId} modeId={ModeId} actionPath={ActionPath} pendingIndex={PendingIndex}",
+                actionRequestId,
+                request.ActionId.Trim(),
+                request.TargetPlayer.Trim(),
+                creature.Id,
+                creature.Name,
+                summon.Count,
+                summon.RadiusMeters,
+                summon.OffsetMeters,
+                summon.SelectionMode,
+                request.ApprovalId.Trim(),
+                request.ModeId.Trim(),
+                actionPath,
+                Path.Combine(options.Value.PluginBridgeActionsPath, "pending.txt"));
             return Results.Accepted($"/api/plugin/actions/{actionRequestId}/result", BuildValidatedActionResponse(request, summon, creature, dryRun: false, queued: true, actionRequestId, outcome: "queued-for-dev-plugin-execution", logLine));
         });
 
-        endpoints.MapGet("/api/plugin/actions/{actionRequestId}/result", async (string actionRequestId, IOptions<WindroseStateOptions> options, CancellationToken cancellationToken) =>
+        endpoints.MapGet("/api/plugin/actions/{actionRequestId}/result", async (string actionRequestId, IOptions<WindroseStateOptions> options, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
         {
+            var logger = loggerFactory.CreateLogger("WindrosePluginBridgeActions");
             if (!IsSafeActionRequestId(actionRequestId))
             {
+                logger.LogWarning("Windrose plugin action result rejected because actionRequestId is unsafe actionRequestId={ActionRequestId}", actionRequestId);
                 return Results.BadRequest(new
                 {
                     pluginId = PluginId,
@@ -396,6 +440,7 @@ public static class WindrosePluginBridgeEndpoints
             var resultPath = Path.Combine(options.Value.PluginBridgeResultsPath, $"{actionRequestId}.json");
             if (!File.Exists(resultPath))
             {
+                logger.LogDebug("Windrose plugin action result pending actionRequestId={ActionRequestId} resultPath={ResultPath}", actionRequestId, resultPath);
                 return Results.Ok(new
                 {
                     pluginId = PluginId,
@@ -410,14 +455,17 @@ public static class WindrosePluginBridgeEndpoints
             {
                 await using var stream = File.OpenRead(resultPath);
                 var result = await JsonSerializer.DeserializeAsync<JsonElement>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web), cancellationToken);
+                logger.LogInformation("Windrose plugin action result read actionRequestId={ActionRequestId} resultPath={ResultPath} result={Result}", actionRequestId, resultPath, result.ToString());
                 return Results.Ok(result);
             }
             catch (JsonException ex)
             {
+                logger.LogWarning(ex, "Windrose plugin action result JSON read failed actionRequestId={ActionRequestId} resultPath={ResultPath}", actionRequestId, resultPath);
                 return Results.Problem($"Plugin result writeback is not valid JSON: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
             }
             catch (IOException ex)
             {
+                logger.LogWarning(ex, "Windrose plugin action result IO read failed actionRequestId={ActionRequestId} resultPath={ResultPath}", actionRequestId, resultPath);
                 return Results.Problem($"Plugin result writeback could not be read: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
             }
         });
@@ -526,6 +574,14 @@ public static class WindrosePluginBridgeEndpoints
             approvedDevServer = "windrose2-dev",
             playerTargeting = "non-main/throwaway or consenting dev player only",
             productionAllowed = false
+        },
+        monitoring = new
+        {
+            logPrefix = "[windrose-sidecar-bridge] actionLifecycle",
+            correlationId = actionRequestId,
+            expectedStages = new[] { "dequeue", "parsed", "dispatch", "handler-start", "target-resolved", "result-writeback" },
+            successFields = new[] { "status=executed", "nativeSpawn=true", "spawnedCount" },
+            failureFields = new[] { "status=failed", "nativeSpawn=false", "outcome" }
         }
     };
 

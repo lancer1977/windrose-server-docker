@@ -60,6 +60,7 @@ This roadmap is also the docs mirror for the approved Windrose validation path o
 - Feature overview: `docs/features/server-state-observability/README.md`
 - Capability map: `docs/features/server-state-observability/runtime-control-surface.md`
 - Possibility atlas: `docs/roadmaps/windrose-runtime-control-surface/possibility-atlas.md`
+- V4 candidate inventory: `docs/roadmaps/windrose-runtime-control-surface/v4-candidate-inventory.md`
 - Execution path: `docs/roadmaps/windrose-runtime-control-surface/execution-path.md`
 - Safe smoke harness matrix: `docs/roadmaps/windrose-runtime-control-surface/safe-smoke-harness-matrix.md`
 - ChannelCheevos integration tests: `docs/roadmaps/windrose-runtime-control-surface/channel-cheevos-integration-tests.md`

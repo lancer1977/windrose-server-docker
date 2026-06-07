@@ -1,20 +1,20 @@
 # Windrose Sidecar Bridge Plugin
 
 This WindrosePlus Lua plugin is the repo-owned plugin boundary for the State Web sidecar.
-V4 keeps `dry-run-only` as the default and adds a dev-only execution queue/readback path for the approved `windrose2-dev` test bed. The exact entrypoint is `HandleDodoSwarm`, which can hand off to `ExecuteDodoSwarmNative` when UE4SS game-thread dispatch is available; the current proof still stops short of claiming native gameplay spawning unless the live hook is observed.
+V4 keeps `dry-run-only` as the default and adds a dev-only execution queue/readback path for the approved `windrose2-dev` test bed. The bridge-loop plumbing stays in `init.lua`, while spawn-specific native probe logic lives in `modules/dodo_swarm.lua`; `HandleDodoSwarm` can hand off to `ExecuteDodoSwarmNative` when UE4SS game-thread dispatch is available, but the current proof still stops short of claiming native gameplay spawning unless the live hook is observed.
 
 ## Boundary
 
 - Plugin: `plugins/windrose-sidecar-bridge/`
   - Loads through WindrosePlus / UE4SS Lua mod support.
   - Writes a heartbeat to `windrose_plugin_bridge/status.json`.
-  - Writes typed V3 bridge event envelopes to `windrose_plugin_bridge/events/` for safe heartbeat/readback/error publishing.
-  - In `dry-run-only` mode, exposes `HandleDodoSwarm` as validation/logging only.
-  - In `dev-execute` mode on `windrose2-dev`, consumes approved action files from `windrose_plugin_bridge/actions/` and writes results to `windrose_plugin_bridge/results/`. The native probe is routed through `HandleDodoSwarm -> ExecuteDodoSwarmNative`, but live spawn is only proven when the result reports `nativeSpawn=true`.
+  - Publishes typed V3 plugin → sidecar event envelopes to `windrose_plugin_bridge/events/` for safe heartbeat/readback/error publishing.
+  - In `dry-run-only` mode, exposes `HandleDodoSwarm` as validation/logging only; the V3 command path remains constrained and does not imply live spawning.
+  - In `dev-execute` mode on `windrose2-dev`, consumes approved action files from `windrose_plugin_bridge/actions/` and writes results to `windrose_plugin_bridge/results/`. The sidecar → plugin command/result path is only considered successful when the result writeback reports a real execution; `nativeSpawn=false` remains a valid failed-safe outcome until the live hook is proven.
 - Sidecar: `src/Windrose.StateWeb/`
   - Exposes `/api/plugin/manifest`, `/api/plugin/status`, `/api/plugin/smoke-options`, `/api/plugin/actions/dry-run`, `/api/plugin/actions/execute`, `/api/plugin/actions/{actionRequestId}/result`, and `/api/plugin/events/recent`.
   - Reads the heartbeat from the shared server-files mount.
-  - Queues approved dev-only dodo-swarm requests when `WindroseState__PluginBridgeDevExecutionEnabled=true`; otherwise execution requests are rejected.
+  - Reads plugin → sidecar events from `windrose_plugin_bridge/events/` and queues sidecar → plugin commands into `windrose_plugin_bridge/actions/` when `WindroseState__PluginBridgeDevExecutionEnabled=true`; otherwise execution requests are rejected and must be treated as failed-safe, not successful spawn evidence.
 
 ## Install path
 
@@ -73,7 +73,7 @@ scripts/smoke_windrose_sidecar_bridge.sh
 
 The smoke script creates a disposable `server-files` tree, reuses the Windrose+ installer idempotent path, confirms the plugin lands in `windrose_plus_mods/windrose-sidecar-bridge/`, and validates `windrose_plugin_bridge/config.json`. If a Lua interpreter is available, it also executes `init.lua` and verifies the heartbeat JSON. If no Lua interpreter is present, the script still proves install/config packaging and prints the remaining live proof needed.
 
-For the V4 smoke matrix and its read-only/default-dry-run checklist, use `scripts/smoke_windrose_v4_matrix.sh` or the State Web readback endpoint `GET /api/plugin/smoke-options`. The matrix covers offline/mock, dev no-player, operator non-main, consenting player, random read-only probe, sidecar-down/plugin-down failure, plugin reload, and malformed command cases while keeping any player-bound mutation pinned to explicit consent or a non-main throwaway target.
+For the V4 smoke matrix and its read-only/default-dry-run checklist, use `scripts/smoke_windrose_v4_matrix.sh` or the State Web readback endpoint `GET /api/plugin/smoke-options`. The matrix covers offline/mock, dev no-player, operator non-main, consenting player, random read-only probe, sidecar-down/plugin-down failure, plugin reload, and malformed command cases while keeping any player-bound mutation pinned to explicit consent or a non-main throwaway target. Any allowed smoke should capture the exact payload or command, timestamps, logs, and rollback/revert path; a failed-safe outcome such as `nativeSpawn=false`, `blocked`, or `rejected` is evidence, not success.
 
 ## Dev-server proof
 
@@ -86,6 +86,14 @@ GET http://127.0.0.1:8782/api/plugin/actions/{actionRequestId}/result -> status=
 ```
 
 This proves State Web can queue an approved dev action and WindrosePlus can consume it and write back a result. It does not yet prove in-game creature creation on its own; the live hook path is still gated by `ExecuteInGameThread` plus `HookEngineTick` / `HookUObjectProcessEvent`, so the result can still legitimately report `nativeSpawn=false` when the dispatcher is disabled.
+
+To monitor an injected action, keep the `actionRequestId` returned by `POST /api/plugin/actions/execute` and filter logs for either the ID or the lifecycle prefix:
+
+```bash
+docker compose logs -f windrose windrose-state-web | grep -E 'actionLifecycle|Windrose plugin action|<actionRequestId>'
+```
+
+Expected plugin-side lifecycle stages are `dequeue`, `parsed`, `dispatch`, `handler-start`, `target-resolved`, and `result-writeback`. Success evidence requires `status=executed`, `nativeSpawn=true`, and a positive `spawnedCount`; `nativeSpawn=false` or `native-spawn-blocked-game-thread-dispatch-disabled` remains failed-safe evidence, not a successful spawn.
 
 Rollback on the dev stack:
 

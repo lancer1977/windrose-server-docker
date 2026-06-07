@@ -96,6 +96,26 @@ local function json_number(body, key)
   return tonumber(body:match(pattern))
 end
 
+local function action_summary(action)
+  if not action then
+    return "actionRequestId=unknown actionId=unknown handler=unknown"
+  end
+
+  return "actionRequestId=" .. tostring(action.actionRequestId or "unknown") ..
+    " actionId=" .. tostring(action.actionId or "unknown") ..
+    " handler=" .. tostring(action.handler or "unknown") ..
+    " target=" .. tostring(action.targetPlayer or "unknown") ..
+    " creatureId=" .. tostring(action.creatureId or "unknown") ..
+    " creatureName=" .. tostring(action.creatureName or "unknown") ..
+    " count=" .. tostring(action.count or "unknown") ..
+    " approvalId=" .. tostring(action.approvalId or "") ..
+    " modeId=" .. tostring(action.modeId or "")
+end
+
+local function log_action(stage, action, fields)
+  print("[" .. plugin_id .. "] actionLifecycle stage=" .. tostring(stage) .. " " .. action_summary(action) .. (fields and (" " .. fields) or ""))
+end
+
 local event_sequence = 0
 
 local function next_event_id(prefix)
@@ -191,267 +211,7 @@ local function write_status(message)
   emit_heartbeat_event(mode == "dev-execute" and "healthy" or "healthy", mode == "dev-execute" and "plugin loaded; dev execution queue enabled; native actor spawn probe available" or "plugin loaded; dry-run native-hook seam available")
 end
 
-local creature_specs = {
-  ["R5.Creature.Dodo"] = { name = "Dodo", assetPath = "/Game/Gameplay/Character/AI/Mob/Dodo/BP_Mob_Dodo", assetName = "BP_Mob_Dodo" },
-  ["R5.Creature.Wolf"] = { name = "Wolf", assetPath = "/Game/Gameplay/Character/AI/Mob/Wolf/BP_Mob_Wolf", assetName = "BP_Mob_Wolf" }
-}
-
-local function valid_uobject(obj)
-  if not obj then return false end
-  local ok, is_valid = pcall(function() return obj:IsValid() end)
-  return ok and is_valid == true
-end
-
-local function player_name(pc)
-  local name = nil
-  pcall(function()
-    local ps = pc.PlayerState
-    if valid_uobject(ps) then
-      local value = ps.PlayerNamePrivate or ps.PlayerName
-      if value then
-        local ok, str = pcall(function() return value:ToString() end)
-        name = ok and str or tostring(value)
-      end
-    end
-  end)
-  return name
-end
-
-local function target_matches(target, p_name, pawn_name, pawn_full_name)
-  if not target or target == "" then return false end
-  local needle = tostring(target):lower()
-  for _, candidate in ipairs({ p_name, pawn_name, pawn_full_name }) do
-    if candidate and tostring(candidate):lower():find(needle, 1, true) then return true end
-  end
-  return false
-end
-
-local function resolve_target_pawn(target)
-  local admin = WindrosePlus and WindrosePlus._modules and WindrosePlus._modules.Admin or nil
-  if admin and type(admin._findPlayersByName) == "function" then
-    local ok, players = pcall(admin._findPlayersByName, target)
-    if ok and type(players) == "table" and #players == 1 and valid_uobject(players[1].pawn) then
-      local p = players[1]
-      return p.pawn, p.displayName or p.name or p.actorName or target
-    end
-    if ok and type(players) == "table" and #players > 1 then
-      return nil, "Target player ambiguous in WindrosePlus Admin cache: " .. tostring(target)
-    end
-    ok, players = pcall(admin._getPlayers)
-    if ok and type(players) == "table" and #players == 1 and valid_uobject(players[1].pawn) then
-      local p = players[1]
-      print("[" .. plugin_id .. "] target lookup used WindrosePlus Admin single-online-pawn fallback requestedTarget=" .. tostring(target))
-      return p.pawn, p.displayName or p.name or p.actorName or target
-    end
-  end
-
-  local pcs = FindAllOf and FindAllOf("PlayerController") or nil
-  if not pcs then return nil, "No PlayerController instances found" end
-  local fallback_pawn = nil
-  local fallback_label = nil
-  local fallback_count = 0
-  for _, pc in ipairs(pcs) do
-    if valid_uobject(pc) then
-      local p_name = player_name(pc)
-      local pc_full_name = nil
-      pcall(function() pc_full_name = pc:GetFullName() end)
-      local pawn = nil
-      pcall(function() pawn = pc.Pawn end)
-      if valid_uobject(pawn) then
-        local pawn_full_name = nil
-        local pawn_name = nil
-        pcall(function()
-          pawn_full_name = pawn:GetFullName()
-          pawn_name = pawn_full_name and (pawn_full_name:match("([^%.]+)$") or pawn_full_name) or nil
-        end)
-        fallback_pawn = pawn
-        fallback_label = p_name or pawn_name or pc_full_name or target
-        fallback_count = fallback_count + 1
-        if target_matches(target, p_name, pawn_name, pawn_full_name) or target_matches(target, pc_full_name, nil, nil) then
-          return pawn, fallback_label
-        end
-      end
-    end
-  end
-  if fallback_count == 1 then
-    print("[" .. plugin_id .. "] target lookup used single-online-pawn fallback requestedTarget=" .. tostring(target) .. " resolved=" .. tostring(fallback_label))
-    return fallback_pawn, fallback_label or target
-  end
-  return nil, "Target player not found or ambiguous valid pawn count=" .. tostring(fallback_count) .. ": " .. tostring(target)
-end
-
-local asset_registry_helpers = nil
-local function load_actor_class(spec)
-  if not spec then return nil, "Unsupported creature" end
-  if not asset_registry_helpers then
-    if type(StaticFindObject) ~= "function" then return nil, "StaticFindObject unavailable" end
-    asset_registry_helpers = StaticFindObject("/Script/AssetRegistry.Default__AssetRegistryHelpers")
-  end
-  if not valid_uobject(asset_registry_helpers) then return nil, "AssetRegistryHelpers unavailable" end
-  if not UEHelpers or type(UEHelpers.FindOrAddFName) ~= "function" then return nil, "UEHelpers.FindOrAddFName unavailable" end
-
-  local asset_data = {
-    PackageName = UEHelpers.FindOrAddFName(spec.assetPath),
-    AssetName = UEHelpers.FindOrAddFName(spec.assetName)
-  }
-  local actor_class = asset_registry_helpers:GetAsset(asset_data)
-  if valid_uobject(actor_class) then return actor_class, nil end
-
-  -- UE4 fallback shape used by BPModLoader on older builds.
-  asset_data = { ObjectPath = UEHelpers.FindOrAddFName(spec.assetPath .. "." .. spec.assetName) }
-  actor_class = asset_registry_helpers:GetAsset(asset_data)
-  if valid_uobject(actor_class) then return actor_class, nil end
-
-  return nil, "Failed to load actor class " .. spec.assetPath .. "." .. spec.assetName
-end
-
-local function resolve_world_from_pawn(pawn)
-  local world = nil
-  pcall(function() if pawn.GetWorld then world = pawn:GetWorld() end end)
-  if valid_uobject(world) then return world end
-  local worlds = FindAllOf and FindAllOf("World") or nil
-  if worlds then
-    for _, candidate in ipairs(worlds) do
-      if valid_uobject(candidate) then
-        local full_name = ""
-        pcall(function() full_name = candidate:GetFullName() end)
-        if full_name:find("GenlandiaMulty", 1, true) then return candidate end
-        if not world then world = candidate end
-      end
-    end
-  end
-  return world
-end
-
-local function spawn_creature_near_pawn(action, pawn, target_label)
-  local spec = creature_specs[action.creatureId] or creature_specs["R5.Creature.Dodo"]
-  local count = tonumber(action.count) or 1
-  if count < 1 then count = 1 end
-  if count > 12 then count = 12 end -- dev smoke guard: keep accidental swarms small.
-
-  local actor_class, class_error = load_actor_class(spec)
-  if not actor_class then return false, class_error, 0 end
-
-  local world = resolve_world_from_pawn(pawn)
-  if not valid_uobject(world) then return false, "Unable to resolve valid world", 0 end
-
-  local base = { X = 0, Y = 0, Z = 0 }
-  pcall(function()
-    local loc = pawn:K2_GetActorLocation()
-    if loc then base = { X = loc.X or 0, Y = loc.Y or 0, Z = loc.Z or 0 } end
-  end)
-
-  local radius = tonumber(action.radiusMeters) or 6
-  if radius < 2 then radius = 2 end
-  if radius > 20 then radius = 20 end
-  local spawned = 0
-  local last_error = nil
-
-  for i = 1, count do
-    local angle = ((i - 1) / count) * 6.28318530718
-    local dist = radius * 100.0
-    local loc = { X = base.X + math.cos(angle) * dist, Y = base.Y + math.sin(angle) * dist, Z = base.Z + 80.0 }
-    local ok, actor = pcall(function() return world:SpawnActor(actor_class, {}, {}) end)
-    if ok and valid_uobject(actor) then
-      pcall(function() actor:K2_SetActorLocation(loc, false, {}, true) end)
-      spawned = spawned + 1
-      local actor_name = "unknown"
-      pcall(function() actor_name = actor:GetFullName() end)
-      print("[" .. plugin_id .. "] nativeSpawn actor=" .. tostring(actor_name) .. " target=" .. tostring(target_label) .. " index=" .. tostring(i))
-    else
-      last_error = tostring(actor)
-    end
-  end
-
-  if spawned > 0 then
-    return true, "native-spawned-" .. tostring(spawned) .. "-" .. spec.name, spawned
-  end
-  return false, last_error or "SpawnActor returned no valid actors", spawned
-end
-
-local function ExecuteDodoSwarmNative(action)
-  local pawn, target_label = resolve_target_pawn(action.targetPlayer)
-  if not pawn then return false, target_label, 0 end
-
-  local ok, outcome, spawned = spawn_creature_near_pawn(action, pawn, target_label)
-  return ok, outcome, spawned or 0
-end
-
-local function game_thread_dispatch_enabled()
-  local candidates = {
-    "Z:\\home\\steam\\server-files\\R5\\Binaries\\Win64\\ue4ss\\UE4SS-settings.ini",
-    "Z:\\home\\steam\\server-files\\UE4SS-settings.ini",
-    ".\\UE4SS-settings.ini"
-  }
-  for _, path in ipairs(candidates) do
-    local raw = read_file(path)
-    if raw then
-      local hook_engine_tick = raw:match("HookEngineTick%s*=%s*(%d)")
-      local hook_process_event = raw:match("HookUObjectProcessEvent%s*=%s*(%d)")
-      if hook_engine_tick == "1" or hook_process_event == "1" then return true end
-      if hook_engine_tick == "0" and hook_process_event == "0" then return false end
-    end
-  end
-  return false
-end
-
-local function HandleDodoSwarm(request)
-  local target = request and request.targetPlayer or "unknown"
-  local count = request and request.count or "unknown"
-  local action_request_id = request and request.actionRequestId or "unknown"
-
-  if mode ~= "dev-execute" then
-    print("[" .. plugin_id .. "] denied HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=denied reason=plugin-mode-" .. tostring(mode))
-    emit_error_event("plugin_mode_denied", "HandleDodoSwarm denied because plugin mode is not dev-execute.", action_request_id, nil, false)
-    return false, "denied-plugin-mode", false
-  end
-
-  local pawn, target_label = resolve_target_pawn(request.targetPlayer)
-  if not pawn then
-    emit_error_event("target_lookup_failed", tostring(target_label), action_request_id, nil, false)
-    return false, target_label, 0
-  end
-
-  emit_player_readback_event(tostring(target or target_label), tostring(target_label), true, action_request_id, "Read-only target lookup completed without mutating player state.")
-
-  -- Prefer game-thread dispatch when UE4SS exposes it; UObject enumeration and
-  -- SpawnActor are unsafe from the RCON/LoopAsync thread. The dispatched closure
-  -- writes the result file itself, so the sidecar can poll for final readback.
-  if type(ExecuteInGameThread) == "function" and type(write_action_result) == "function" and game_thread_dispatch_enabled() then
-    ExecuteInGameThread(function()
-      local ok, outcome, spawned = ExecuteDodoSwarmNative(request)
-      if ok then
-        print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=" .. tostring(outcome) .. " nativeSpawn=true spawnedCount=" .. tostring(spawned or 0))
-        write_action_result(request, "executed", true, outcome or "native-spawned", "Plugin consumed the approved dev action and spawned native actor(s) on the game thread.", true, spawned or 0)
-      else
-        print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=native-spawn-failed nativeSpawn=false error=" .. tostring(outcome))
-        emit_error_event("native_spawn_failed", tostring(outcome or "native-spawn-failed"), action_request_id, nil, true)
-        write_action_result(request, "failed", false, outcome or "native-spawn-failed", "Plugin dispatched the native spawn action to the game thread, but it did not complete.", false, spawned or 0)
-      end
-    end)
-    print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=native-spawn-scheduled")
-    return true, "native-spawn-scheduled", false, 0, true
-  end
-
-  if not game_thread_dispatch_enabled() then
-    print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=native-spawn-blocked-game-thread-dispatch-disabled nativeSpawn=false")
-    emit_error_event("game_thread_dispatch_disabled", "Native spawn blocked because the game-thread dispatch gate is disabled.", action_request_id, nil, true)
-    return false, "native-spawn-blocked-game-thread-dispatch-disabled", false, 0
-  end
-
-  -- Fallback path for builds where the game-thread dispatcher is unavailable
-  -- even though hooks appear enabled.
-  local ok, outcome, spawned = ExecuteDodoSwarmNative(request)
-
-  if ok then
-    print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=" .. tostring(outcome) .. " nativeSpawn=true spawnedCount=" .. tostring(spawned or 0))
-    return true, outcome or "native-spawned", true, spawned or 0
-  end
-
-  print("[" .. plugin_id .. "] dev-execute HandleDodoSwarm actionRequestId=" .. tostring(action_request_id) .. " target=" .. tostring(target) .. " count=" .. tostring(count) .. " result=native-spawn-failed nativeSpawn=false error=" .. tostring(outcome))
-  emit_error_event("native_spawn_failed", tostring(outcome or "native-spawn-failed"), action_request_id, nil, true)
-  return false, outcome or "native-spawn-failed", false, spawned or 0
-end
+local HandleDodoSwarm
 
 local function action_from_body(body)
   return {
@@ -471,7 +231,7 @@ local function action_from_body(body)
   }
 end
 
-function write_action_result(action, status, executed, outcome, message, native_spawn, spawned_count)
+local function write_action_result(action, status, executed, outcome, message, native_spawn, spawned_count)
   mkdir_p(path_join(bridge_root, "results"))
   local action_request_id = action and action.actionRequestId or "unknown"
   local result = string.format(
@@ -493,12 +253,52 @@ function write_action_result(action, status, executed, outcome, message, native_
     native_spawn and "true" or "false",
     tonumber(spawned_count) or 0
   )
-  write_file(path_join(path_join(bridge_root, "results"), action_request_id .. ".json"), result)
+  local result_path = path_join(path_join(bridge_root, "results"), action_request_id .. ".json")
+  local wrote = write_file(result_path, result)
+  log_action("result-writeback", action, "status=" .. tostring(status) .. " executed=" .. tostring(executed and "true" or "false") .. " outcome=" .. tostring(outcome) .. " nativeSpawn=" .. tostring(native_spawn and "true" or "false") .. " spawnedCount=" .. tostring(tonumber(spawned_count) or 0) .. " resultPath=" .. tostring(result_path) .. " resultWriteOk=" .. tostring(wrote and "true" or "false"))
 end
+
+local function load_local_module(name)
+  local ok, module = pcall(require, name)
+  if ok then return module end
+
+  local short_name = tostring(name):match("([^%.]+)$") or tostring(name)
+  ok, module = pcall(require, short_name)
+  if ok then return module end
+
+  local source = debug and debug.getinfo and debug.getinfo(1, "S") and debug.getinfo(1, "S").source or ""
+  local normalized_source = tostring(source):gsub("\\", "/")
+  local script_dir = normalized_source:match("^@(.+/)init%.lua$")
+  local candidate_paths = {}
+  if script_dir then
+    table.insert(candidate_paths, script_dir .. "modules/" .. short_name .. ".lua")
+  end
+  table.insert(candidate_paths, "Z:\\home\\steam\\server-files\\windrose_plus_mods\\windrose-sidecar-bridge\\modules\\" .. short_name .. ".lua")
+  table.insert(candidate_paths, "/home/steam/server-files/windrose_plus_mods/windrose-sidecar-bridge/modules/" .. short_name .. ".lua")
+
+  local errors = {}
+  for _, path in ipairs(candidate_paths) do
+    ok, module = pcall(dofile, path)
+    if ok then return module end
+    table.insert(errors, tostring(path) .. ": " .. tostring(module))
+  end
+
+  error("failed to load local module " .. tostring(name) .. ": " .. table.concat(errors, " | "))
+end
+
+local dodo_swarm = load_local_module("modules.dodo_swarm")
+HandleDodoSwarm = dodo_swarm.create({
+  plugin_id = plugin_id,
+  mode = mode,
+  emit_error_event = emit_error_event,
+  emit_player_readback_event = emit_player_readback_event,
+  write_action_result = write_action_result,
+})
 
 local function process_action(action_request_id)
   if not action_request_id or action_request_id == "" then return false end
   local action_path = path_join(path_join(bridge_root, "actions"), action_request_id .. ".json")
+  log_action("dequeue", { actionRequestId = action_request_id }, "actionPath=" .. tostring(action_path))
   local body = read_file(action_path)
   if not body then
     write_action_result({ actionRequestId = action_request_id }, "failed", false, "action-file-missing", "Action file was listed in pending.txt but could not be read.")
@@ -508,26 +308,33 @@ local function process_action(action_request_id)
 
   local action = action_from_body(body)
   action.actionRequestId = action.actionRequestId or action_request_id
+  log_action("parsed", action, "approved=" .. tostring(action.approved) .. " dryRun=" .. tostring(action.dryRun))
 
   if action.approved ~= true or action.dryRun == true then
+    log_action("denied", action, "reason=approval-required approved=" .. tostring(action.approved) .. " dryRun=" .. tostring(action.dryRun))
     write_action_result(action, "denied", false, "approval-required", "Queued action was not approved for dev execution.")
     emit_error_event("approval_required", "Queued action was not approved for dev execution.", action.actionRequestId, nil, false)
     return true
   end
 
   if action.actionId ~= "windrose.spawn.dodo_swarm" or action.handler ~= "HandleDodoSwarm" then
+    log_action("denied", action, "reason=unsupported-action")
     write_action_result(action, "denied", false, "unsupported-action", "Only windrose.spawn.dodo_swarm/HandleDodoSwarm is allowed in V4.")
     emit_error_event("unsupported_action", "Only windrose.spawn.dodo_swarm/HandleDodoSwarm is allowed in V4.", action.actionRequestId, nil, false)
     return true
   end
 
+  log_action("dispatch", action, "handler=HandleDodoSwarm")
   local ok, outcome, native_spawn, spawned_count, scheduled = HandleDodoSwarm(action)
   if scheduled then
+    log_action("scheduled", action, "outcome=" .. tostring(outcome) .. " nativeSpawn=false")
     return true
   end
   if ok then
+    log_action("handler-returned", action, "status=executed outcome=" .. tostring(outcome) .. " nativeSpawn=" .. tostring(native_spawn and "true" or "false") .. " spawnedCount=" .. tostring(spawned_count or 0))
     write_action_result(action, "executed", true, outcome or "native-spawned", "Plugin consumed the approved dev action and attempted native actor spawn.", native_spawn, spawned_count)
   else
+    log_action("handler-returned", action, "status=failed outcome=" .. tostring(outcome) .. " nativeSpawn=" .. tostring(native_spawn and "true" or "false") .. " spawnedCount=" .. tostring(spawned_count or 0))
     write_action_result(action, "failed", false, outcome or "not-executed", "Plugin did not complete the queued native spawn action.", native_spawn, spawned_count)
   end
 
@@ -545,7 +352,12 @@ local function process_pending_actions()
     local trimmed = tostring(action_request_id):match("^%s*(.-)%s*$")
     if trimmed ~= "" then
       local ok, processed = pcall(process_action, trimmed)
-      if not ok or not processed then
+      if not ok then
+        local error_message = tostring(processed)
+        print("[" .. plugin_id .. "] actionLifecycle stage=processing-error actionRequestId=" .. tostring(trimmed) .. " error=" .. error_message)
+        write_action_result({ actionRequestId = trimmed, actionId = "unknown", handler = "unknown" }, "failed", false, "action-processing-exception", error_message, false, 0)
+        emit_error_event("action_processing_exception", error_message, trimmed, nil, true)
+      elseif not processed then
         table.insert(remaining, trimmed)
       end
     end

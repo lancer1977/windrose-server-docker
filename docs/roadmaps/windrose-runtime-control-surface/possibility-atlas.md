@@ -24,6 +24,7 @@ Status labels used on this page:
 
 - [Windrose Runtime Control Surface Map](../../features/server-state-observability/runtime-control-surface.md)
 - [Windrose Runtime Control Surface Roadmap](README.md)
+- [V4 Candidate Inventory](v4-candidate-inventory.md)
 - [Execution Path](execution-path.md)
 - [Safe Smoke Harness Matrix](safe-smoke-harness-matrix.md)
 - [Operator Contract](operator-contract.md)
@@ -91,6 +92,13 @@ These are the write-capable actions already documented in the WindrosePlus/RCON 
 | Inventory stack enforcement | policy config + manifest/status readback | unsafe/unknown | Readback is allowed; live writes remain blocked because upstream inventory mutation is unsafe/no-op. |
 
 Recommended first native proof: teleporter-counting / placement-guard hook. It is the smallest safe proof because it can begin as a read-only island lookup plus teleporter count and only later grow into reject/queue behavior for over-cap placements.
+
+### Scout notes
+
+- Direct visible creature spawning via `SpawnActor` remains blocked: the repo only proves the dry-run / queue / readback surface, not a safe live native spawn.
+- The current live-smoke blocker is `native-spawn-blocked-game-thread-dispatch-disabled`, which means the `HandleDodoSwarm -> ExecuteDodoSwarmNative` path still needs proven UE4SS game-thread dispatch and a result that explicitly reports `nativeSpawn=true` before any visible spawn can be trusted.
+- Queue/readback execution on the dev stack is dev-gated, not general-purpose: keep it on the approved `windrose2-dev` path with operator approval, a throwaway or non-main target, and rollback evidence.
+- Future upstream/native hook work is still speculative until the hook surface is documented and reviewed with audit/approval behavior.
 
 ## Deferred capabilities
 

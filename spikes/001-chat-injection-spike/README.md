@@ -19,6 +19,7 @@ If external broadcast is available, then live stream interactions can drive visi
 - `WindrosePlus/Scripts/modules/admin.lua`
 - `docs/commands.md`
 - `docs/scripting-guide.md`
+- Hermes Kanban `t_81728619` dev readback against `windrose2-dev` State Web.
 
 ## Findings
 
@@ -28,10 +29,12 @@ If external broadcast is available, then live stream interactions can drive visi
 - The scripting guide shows scheduled announcements as server-log broadcasting, not a documented in-game broadcast/send API.
 - I did not find a documented first-class broadcast command in the current docs.
 - I did find a general Lua command registry and hook surface, which means a native extension or a deeper hook may still make this possible later.
+- `t_81728619` live dev readback confirmed the current bridge is connected in `dev-execute`, but `/api/plugin/manifest` still exposes only `windrose.spawn.dodo_swarm`; there is no message/broadcast action to execute safely yet.
+- `GET /api/plugin/events/recent` returned `404` on the dev service, so there is not currently a deployed recent-event readback surface for proving message delivery either.
 
 ## Verdict: INVALIDATED
 
-The current documented Lua-only surface does not provide a supported way to send a server-side broadcast message. A native UE4SS extension or a later WindrosePlus release would be required before this becomes a real implementation path.
+The current documented Lua-only surface and currently deployed Windrose sidecar bridge do not provide a supported way to send a server-side broadcast message. A native UE4SS extension, a later WindrosePlus release, or a new explicitly reviewed bridge action would be required before this becomes a real implementation path.
 
 ## What worked
 

@@ -454,6 +454,10 @@ public sealed class WindroseEndpointsTests
             Assert.Contains("\"targetPlayer\": \"Dev Throwaway\"", actionFile);
             Assert.Contains("\"creatureName\": \"Dodo\"", actionFile);
             Assert.Contains("\"approvalId\": \"operator-approved-dev-smoke\"", actionFile);
+            Assert.Contains("\"monitoring\": {", actionFile);
+            Assert.Contains("\"logPrefix\": \"[windrose-sidecar-bridge] actionLifecycle\"", actionFile);
+            Assert.Contains("\"expectedStages\": [", actionFile);
+            Assert.Contains("\"result-writeback\"", actionFile);
 
             var pendingIndex = await File.ReadAllTextAsync(Path.Combine(actionsPath, "pending.txt"));
             Assert.Contains(Path.GetFileNameWithoutExtension(actionPath), pendingIndex);
@@ -465,25 +469,26 @@ public sealed class WindroseEndpointsTests
     }
 
     [Fact]
-    public async Task PluginActionResultEndpointReadsPluginWriteback()
+    public async Task PluginActionResultEndpointReadsFailedSafeDispatchDisabledWriteback()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), $"windrose-plugin-test-{Guid.NewGuid():N}");
         var resultsPath = Path.Combine(tempRoot, "windrose_plugin_bridge", "results");
         Directory.CreateDirectory(resultsPath);
-        await File.WriteAllTextAsync(Path.Combine(resultsPath, "action-123.json"), """
-        {"pluginId":"windrose-sidecar-bridge","actionRequestId":"action-123","status":"executed","executed":true,"outcome":"dev-execution-writeback","targetPlayer":"Dev Throwaway"}
+        await File.WriteAllTextAsync(Path.Combine(resultsPath, "action-124.json"), """
+        {"pluginId":"windrose-sidecar-bridge","actionRequestId":"action-124","status":"failed","executed":false,"nativeSpawn":false,"outcome":"native-spawn-blocked-game-thread-dispatch-disabled","targetPlayer":"Dev Throwaway","reason":"game-thread dispatch disabled"}
         """);
 
         try
         {
             await using var app = CreateApp(serverFilesPath: tempRoot, pluginBridgeDevExecutionEnabled: true);
             await app.StartAsync();
-            var body = await InvokeGetWithRouteValueAsync(app, "/api/plugin/actions/{actionRequestId}/result", "/api/plugin/actions/action-123/result", "actionRequestId", "action-123");
+            var body = await InvokeGetWithRouteValueAsync(app, "/api/plugin/actions/{actionRequestId}/result", "/api/plugin/actions/action-124/result", "actionRequestId", "action-124");
 
-            Assert.Contains("\"actionRequestId\":\"action-123\"", body);
-            Assert.Contains("\"status\":\"executed\"", body);
-            Assert.Contains("\"executed\":true", body);
-            Assert.Contains("Dev Throwaway", body);
+            Assert.Contains("\"actionRequestId\":\"action-124\"", body);
+            Assert.Contains("\"status\":\"failed\"", body);
+            Assert.Contains("\"executed\":false", body);
+            Assert.Contains("\"nativeSpawn\":false", body);
+            Assert.Contains("native-spawn-blocked-game-thread-dispatch-disabled", body);
         }
         finally
         {

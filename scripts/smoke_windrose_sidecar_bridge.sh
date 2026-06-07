@@ -34,6 +34,7 @@ CONFIG_PATH="$SERVER_FILES/windrose_plugin_bridge/config.json"
 for required in \
     "$TARGET_DIR/mod.json" \
     "$TARGET_DIR/init.lua" \
+    "$TARGET_DIR/modules/dodo_swarm.lua" \
     "$CONFIG_PATH"; do
     if [ ! -f "$required" ]; then
         echo "smoke_windrose_sidecar_bridge: missing expected file: $required" >&2
